@@ -1,5 +1,4 @@
-import Token
-import re
+# import re
 
 ACCESS_MODIFIERS = {
     "public": "PUBLIC",
@@ -113,7 +112,31 @@ class Lexer:
         while self.state is not None and self.state != "EOF":
             while ch in IGNORE:
                 ch = self.get_char(text)
-
+            
+            """
+            Для определения string
+            """
+            if ch == '"':
+                self.state = "STRING"
+                ch = self.get_char(text)
+                while ch != '"':
+                    accum += ch
+                    ch = self.get_char(text)
+                return Token(accum, DATA_TYPES["string"])
+            
+            """
+            Для определения char
+            """
+            if ch == "'":
+                self.state = "CHAR"
+                ch = self.get_char(text)
+                accum += ch
+                ch = self.get_char(text)
+                if ch != "'":
+                    raise SyntaxError("Invalid DATA_TYPES: CHAR")
+                else:
+                    return Token(accum, DATA_TYPES["char"])                
+                
             """
             Если первым символом встретили не букву и не цифру, то проверяем находится ли
             символ (ch) в OPERATORS, если да, то накапливаем все не буквы и не цифры,
@@ -152,7 +175,7 @@ class Lexer:
                     ch = self.get_char(text)
                 self.pos -= 1
                 return Token(accum, "ID")
-
+            
             """
             Если первым символом встретили цифру, то переходим в состояние "NUM"
             и начинаем собирать следующие цифры.
@@ -175,7 +198,10 @@ class Lexer:
                     raise SyntaxError("Invalid real number, in position {}".format(self.pos))
 
                 self.pos -= 1
-                return Token(accum, "NUM")
+                if "." in accum:
+                    return Token(accum, DATA_TYPES["double"])
+                else:
+                    return Token(accum, DATA_TYPES["int"])
 
     """
     Начало начало - метод parse. Он открывает файл с исходным кодом на Java
