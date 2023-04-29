@@ -55,6 +55,9 @@ OPERATORS = {
     "&&": "AND",
     "||": "OR",
     "!": "NOT",
+}
+
+SPEC = {
     "(": "LEFT_BRACKET",
     ")": "RIGHT_BRACKET",
     "[": "LEFT_SQUARE_BRACKET",
@@ -63,9 +66,8 @@ OPERATORS = {
     "}": "RIGHT_CURL_BRACKET",
     ".": "DOT",
     ";": "SEMICOLON",
-    ",": "SEMI"
+    ",": "COMMA"
 }
-
 
 IGNORE = ["\n", " ", "\t", ":"]
 
@@ -119,9 +121,12 @@ class Lexer:
             if ch == '"':
                 self.state = "STRING"
                 ch = self.get_char(text)
-                while ch != '"':
+                # Здесь нужно идти, пока состояние STRING, тогда получится через состояния
+                while self.state == "STRING": 
                     accum += ch
                     ch = self.get_char(text)
+                    if ch == '"':
+                        self.state = None
                 return Token(accum, DATA_TYPES["string"])
             
             """
@@ -136,7 +141,10 @@ class Lexer:
                     raise SyntaxError("Invalid DATA_TYPES: CHAR")
                 else:
                     return Token(accum, DATA_TYPES["char"])                
-                
+
+            if ch in SPEC:
+                accum += ch
+                return Token(accum, SPEC[ch])
             """
             Если первым символом встретили не букву и не цифру, то проверяем находится ли
             символ (ch) в OPERATORS, если да, то накапливаем все не буквы и не цифры,
@@ -146,12 +154,18 @@ class Lexer:
             ============================ Возможны ошибки ============================
             Надо проверить, что будет если наша последовательность не попадет в OPERATORS
             """
-            if not ch.isalpha() and not ch.isnumeric():
-                while not ch.isalnum():
+            if ch in OPERATORS:
+                self.state = "OPERATOR"
+                while self.state is not None:
                     accum += ch
-                    if accum in OPERATORS:
-                        return Token(accum, OPERATORS[accum])
                     ch = self.get_char(text)
+                    if ch == ";" or ch not in OPERATORS:
+                        self.state = None
+                self.pos -= 1
+                if accum in OPERATORS:
+                    return Token(accum, OPERATORS[accum])
+                else:
+                    raise SyntaxError("Invalid operator {}".format(self.pos))
 
             """
             Если первым символом встретили букву, то переходим в состояние "ID" и начинаем собирать
@@ -186,13 +200,31 @@ class Lexer:
             Надо проверять
             """
             if ch.isnumeric():
-                self.state = "NUM"
-                while ch.isnumeric():
+                self.state = "INT"
+                while self.state is not None:
                     accum += ch
                     ch = self.get_char(text)
                     if ch == ".":
+                        if self.state == "DOUBLE":
+                            raise SyntaxError("Invalid data type: double {}".format(self.pos))
+                        self.state = "DOUBLE"
                         accum += ch
                         ch = self.get_char(text)
+
+                    if ch == ";":
+                        self.state = None
+                    # elif self.state == "DOUBLE" and ch == ".":
+                    #     raise SyntaxError("Invalid data type: double {}".format(self.pos))
+                    elif ch in SPEC:
+                        self.state = None
+                    elif ch in OPERATORS:
+                        self.state = None
+                    elif not ch.isnumeric():
+                        if self.state == "DOUBLE":
+                            raise SyntaxError("Invalid data type: double {}".format(self.pos))
+                        else:
+                            raise SyntaxError("Invalid data type integer {}".format(self.pos))
+
                 # Если наше число заканчивается на точку, то выкидываем ошибку
                 if accum[len(accum) - 1] == ".":
                     raise SyntaxError("Invalid real number, in position {}".format(self.pos))
