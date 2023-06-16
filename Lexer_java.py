@@ -235,7 +235,7 @@ class Lexer:
                         accum += ch
                         ch = self.get_char()
 
-                    if ch == ";":
+                    if ch == ";" or ch in help.IGNORE:
                         self.state = None
                     # elif self.state == "DOUBLE" and ch == ".":
                     #     raise SyntaxError("Invalid data type: double {}".format(self.pos))

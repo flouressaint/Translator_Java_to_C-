@@ -1,5 +1,6 @@
 import sys
 from Lexer_java import Lexer, Token, help
+from SymbolTable import SymbolTable
 
 
 class Node:
@@ -10,7 +11,7 @@ class Node:
         return f"{c[pos_1:pos_2]}"
 
     def __repr__(self, level=0):
-        attrs = self.__dict__  # словарь атрибут: значение
+        attrs = self.__dict__  # словарь атрибут : значение
         # если атрибут один и тип его значения - это список,
         # то это узел некоторой последовательности (подпрограмма, либо список)
         if len(attrs) == 1 and isinstance(list(attrs.values())[0], list):
@@ -22,16 +23,16 @@ class Node:
             elements = list(attrs.values())[0]
             for el in elements:
                 res += '|   ' * level
-                res += '|+-'
-                res += el.__repr__(level + 1)
+                res += "|+-"
+                res += el.__repr__(level+1)
         else:
             for attr_name in attrs:
                 res += '|   ' * level
-                res += '|+-'
+                res += "|+-"
                 if isinstance(attrs[attr_name], Token):
                     res += f"{attr_name}: {attrs[attr_name]}\n"
                 else:
-                    res += f"{attr_name}: {attrs[attr_name].__repr__()}\n"
+                    res += f"{attr_name}: {attrs[attr_name].__repr__(level+1)}"
         return res
 
 
@@ -106,8 +107,10 @@ class NodeReturnStatement(Node):
 
 
 class NodeLiteral(Node):
-    def __init__(self, value):
+    def __init__(self, value, _type=None):
+        self.type = _type
         self.value = value
+
 
 
 class NodeStringLiteral(NodeLiteral):
@@ -123,8 +126,9 @@ class NodeFloatLiteral(NodeLiteral):
 
 
 class NodeVar(Node):
-    def __init__(self, _id):
+    def __init__(self, _id, _type):
         self.id = _id
+        self.type = _type
 
 
 class NodeAtomType(Node):
@@ -229,6 +233,8 @@ class Parser:
     def __init__(self, lexer: Lexer):
         self.lexer = lexer
         self.token = self.lexer.get_next_token()
+        self.symbolTable = list()
+        self.symbolTable.append(SymbolTable())
 
     def next_token(self):
         self.token = self.lexer.get_next_token()
@@ -237,53 +243,174 @@ class Parser:
         print(f'Ошибка синтаксического анализа ({self.lexer.pos}): {msg}')
         sys.exit(1)
 
-    # Этот метод обрабатывает выражения
-    def expression(self) -> Node:
-        pass
+    def operand(self, _type) -> Node:
+        first_token = self.token
+        # Определяем тип операнда
+        if self.token.value.lower() == "int":
+            self.next_token()
+            return NodeIntLiteral(first_token.name, first_token.value.lower())
+        elif self.token.value.lower() == "double":
+            self.next_token()
+            return NodeFloatLiteral(first_token.name, first_token.value.lower())
+        elif self.token.value.lower() == "string":
+            self.next_token()
+            return NodeStringLiteral(first_token.name, first_token.value.lower())
+        # Если в качестве операнда выступает ID, то это может быть:
+        # переменная, функция или массив.
+        elif self.token.value == "ID":
+            # Проверяем есть переменная в таблице символов, т.е. объявлена ли она
+            for table in self.symbolTable:
+                if self.token.name not in table.table:
+                    self.error(SemanticErrors.UnknowingIdentifier())
+            # Берем следующий токен
+            self.next_token()
+            # Если следующий токен это (, то значит операндом является функция
+            if self.token.name == "(":
+                pass
+            # Если следующий токен это [, то значит операндом является массив
+            elif self.token.name == "[":
+                pass
+            # Если не встретили ( и [, значит операндом является переменная
+            else:
+                return NodeVar(first_token.name, first_token.value.lower())
+        # Если операндом является (, то значит мы встретили скобку в выражении
+        # и должны продолжить разбор выражения, но уже в скобках.
+        elif self.token.name == "(":
+            self.next_token()
+            expression = self.expression(_type)
+            self.next_token()
+            return expression
+
+    # Этот метод определяет, есть ли у операнда унарный минус или нет.
+    # А также начинает сам разбор операнда.
+    def factor(self, _type) -> Node:
+        if self.token.name == "-":
+            self.next_token()
+            return NodeUnaryMinus(self.operand(_type))
+        else:
+            return self.operand(_type)
+
+    # Этот метод обрабатывает арифметическое выражение.
+    # А именно выражение с операциями * и /.
+    def term(self, _type) -> Node:
+        left = self.factor(_type)
+        op = self.token.name
+        while op in {"*", "/"}:
+            self.next_token()
+            if op == "*":
+                right = self.factor(_type)
+                left = NodeMultiply(left, right)
+            elif op == "/":
+                right = self.factor(_type)
+                left = NodeDivision(left, right)
+            op = self.token.name
+        return left
+
+    # Этот метод обрабатывает арифметические выражения.
+    # А именно выражения с операциями + и -.
+    def expression(self, _type) -> Node:
+        left = self.term(_type)
+        op = self.token.name
+        while op in {"+", "-"}:
+            self.next_token()
+            if op == "+":
+                left = NodePlus(left, self.term(_type))
+            elif op == "-":
+                left = NodeMinus(left, self.term(_type))
+            op = self.token.name
+        return left
 
     # Этот метод обрабатывает пары токенов вида: <type> <id>
+    # или вида: <type> <id> = <right_side>
     def declaration(self) -> Node:
-        if self.token.name not in help.DATA_TYPES:
-            self.error(MissingDataType.report())
-        _type = self.token.value
+        # Сохраняем тип переменной или массива
+        data_type = self.token.name
         self.next_token()
-
-        if self.token.value != "ID":
-            self.error(MissingID.report())
-        _id = self.token.name
-        self.next_token()
-
-        if self.token.name == "=":
-            right_side = self.expression()
-            return NodeAssigning(NodeDeclaration(_type, _id), right_side)
-        return NodeDeclaration(_type, _id)
+        if self.token.value == "ID":
+            # Проверяем объявлена ли уже переменная.
+            # Если объявлена, то выкидываем ошибку.
+            if self.symbolTable[len(self.symbolTable) - 1].isExist(self.token.name):
+                self.error(SemanticErrors.AlreadyDeclared())
+            # Сохраняем id переменной
+            _id = self.token.name
+            self.next_token()
+            # Проверяем на наличие знака =
+            if self.token.name == "=":
+                self.next_token()
+                if self.token.value.lower() in help.DATA_TYPES or self.token.value == "ID":
+                    # Добавляем переменную в таблицу символов
+                    self.symbolTable[len(self.symbolTable) - 1].table[_id] = data_type
+                    left_side = NodeDeclaration(data_type, _id)
+                    right_side = NodeIntLiteral(self.expression(data_type))
+                    return NodeAssigning(left_side, right_side)
+            # Добавляем переменную в таблицу символов
+            self.symbolTable[len(self.symbolTable) - 1].table[_id] = data_type
+            return NodeDeclaration(data_type, _id)
+        # Обрабатываем объявление массивов.
+        elif self.token.name == "[":
+            self.next_token()
+            if self.token.name != "]":
+                self.error(SyntaxErrors.MissingSpecSymbol("]"))
+            self.next_token()
+            if self.token.value != "ID":
+                self.error(SyntaxErrors.MissingID())
+            _id = self.token.name
+            self.next_token()
+        else:
+            self.error(SyntaxErrors.DeclarationError())
 
     def block(self) -> Node:
         statements = []
         while self.token.name not in {"}"}:
-            statements.append(self.statement())
+            statements.append(self.local_statement())
             if self.token.name != ";":
-                self.error(MissingSpecSybmol.report(";"))
+                self.error(SyntaxErrors.MissingSpecSymbol(";"))
             self.next_token()
+        # Удаляем локальную таблицу символов
+        self.symbolTable.pop()
         return NodeBlock(statements)
 
     # При вызове функции мы уже смотрим на следующий токен
     def formal_params(self) -> Node:
+        # Добавляем локальную для метода таблицу символов
+        self.symbolTable.append(SymbolTable())
         params = []
         while self.token.name not in {")"}:
             # В params надо добавлять два токена: <type> и <id>.
             # Это и есть наш один формальный параметр.
             params.append(self.declaration())
             if self.token.name != "," and self.token.name != ")":
-                self.error(MissingSpecSybmol.report(","))
+                self.error(SyntaxErrors.MissingSpecSymbol(","))
             if self.token.name == ",":
                 self.next_token()
+        # Добавляем локальную таблицу символов аргументы функции
+        for i in params:
+            self.symbolTable[len(self.symbolTable) - 1].table[i.id] = i.type
         self.next_token()
         return NodeFormalParams(params)
 
+    def local_statement(self) -> Node:
+        # Обрабатываем объявление переменных и массивов.
+        # Их грамматики:
+        # переменные: <type> <id> =? <right_side>?;
+        # массивы: <type>[] <id> =? { <constants>? ,? }
+        if self.token.name in help.DATA_TYPES:
+            return  self.declaration()
+        # Обрабатываем ситуации, когда меняем значение переменной
+        elif self.token.value == "ID":
+            pass
+        # Обрабатываем условия. Их грамматика:
+        # if ( <expression> ) { <statements> }
+        elif self.token.name == "if":
+            pass
+        # Обрабатываем цикл while. Его грамматика:
+        # while ( <expression> ) { <statements> }
+        elif self.token.name == "while":
+            pass
+
     def statement(self) -> Node:
         # Разбор методов класса, его грамматика:
-        # public <ret_type> <id> ( <formal_params> )
+        # public static <ret_type> <id> ( <formal_params> )
         if self.token.name in help.ACCESS_MODIFIERS:
             # Сохраняем модификатор доступа
             access_mod = self.token.value
@@ -295,19 +422,22 @@ class Parser:
             self.next_token()
 
             if self.token.name not in help.DATA_TYPES:
-                self.error(MissingDataType.report())
+                self.error(SyntaxErrors.MissingDataType())
             # Сохраняем возвращаемый тип данных
             ret_type = self.token.value
             self.next_token()
 
             if self.token.value != "ID":
-                self.error(MissingID.report())
+                self.error(SyntaxErrors.MissingID())
             # Сохраняем имя метода
             _id = self.token.name
             self.next_token()
 
+            # Добавляем нашу функцию в таблицу символов
+            self.symbolTable[len(self.symbolTable) - 1].table[_id] = ret_type.lower()
+
             if self.token.name != "(":
-                self.error(MissingSpecSybmol.report("("))
+                self.error(SyntaxErrors.MissingSpecSymbol("("))
             # Пропускаем круглую скобку
             self.next_token()
 
@@ -315,15 +445,15 @@ class Parser:
             formal_params = self.formal_params()
             # Здесь должна быть проверка на наличие {
             if self.token.name != "{":
-                self.error(MissingSpecSybmol.report("{"))
+                self.error(SyntaxErrors.MissingSpecSymbol("{"))
             # Пропускаем }
             self.next_token()
 
             # Начинаем разбор тела метода
             block = self.block()
-            # Здесь должна быть проверка на наличие }
+            # Здесь должна быть проверка на наличие '}'
             if self.token.name != "}":
-                self.error(MissingSpecSybmol.report("}"))
+                self.error(SyntaxErrors.MissingSpecSymbol("}"))
             # Пропускаем }
             self.next_token()
             return NodeMethod(access_mod, ret_type, _id, formal_params, block)
@@ -345,7 +475,7 @@ class Parser:
                 self.error("Missing keyword: class")
             self.next_token()
             if self.token.value != "ID":
-                self.error(MissingID.report())
+                self.error(SyntaxErrors.MissingID())
             self.next_token()
             if self.token.name not in help.SPEC:
                 self.error("Expected '{'")
@@ -361,19 +491,33 @@ class Parser:
             return NodeProgram(statements)
 
 
-class MissingID:
+class SemanticErrors:
     @staticmethod
-    def report():
+    def UnknowingIdentifier():
+        return "Using unknowing identifier"
+
+    @staticmethod
+    def AlreadyDeclared():
+        return "Variable already declared"
+
+    @staticmethod
+    def TypeMismatch():
+        return "Types of operands are different"
+
+
+class SyntaxErrors:
+    @staticmethod
+    def DeclarationError():
+        return "Declaration error"
+
+    @staticmethod
+    def MissingID():
         return "Missing identifier"
 
-
-class MissingSpecSybmol:
     @staticmethod
-    def report(text):
+    def MissingSpecSymbol(text):
         return "Missing special symbol {}".format(text)
 
-
-class MissingDataType:
     @staticmethod
-    def report():
+    def MissingDataType():
         return "Missing declaration data type"
