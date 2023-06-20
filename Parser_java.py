@@ -1,9 +1,13 @@
 import sys
 from Lexer_java import Lexer, Token, help
 from SymbolTable import SymbolTable
+from CodeGenerator import CodeGenerator
 
 
 class Node:
+    def __init__(self, children):
+        self.children = children
+
     def __get_class_name(self):
         c = str(self.__class__)
         pos_1 = c.find('.') + 1
@@ -24,7 +28,7 @@ class Node:
             for el in elements:
                 res += '|   ' * level
                 res += "|+-"
-                res += el.__repr__(level+1)
+                res += el.__repr__()
         else:
             for attr_name in attrs:
                 res += '|   ' * level
@@ -32,13 +36,16 @@ class Node:
                 if isinstance(attrs[attr_name], Token):
                     res += f"{attr_name}: {attrs[attr_name]}\n"
                 else:
-                    res += f"{attr_name}: {attrs[attr_name].__repr__(level+1)}"
+                    res += f"{attr_name}: {attrs[attr_name].__repr__()}"
         return res
 
 
 class NodeProgram(Node):
-    def __init__(self, children):
-        self.children = children
+    def getGeneratedText(self):
+        s = ""
+        for item in self.children:
+            s += item.getGeneratedText() + "\n"
+        return s
 
 
 class NodeBlock(NodeProgram):
@@ -54,11 +61,17 @@ class NodeDeclaration(Node):
         self.type = _type
         self.id = _id
 
+    def getGeneratedText(self):
+        return self.type + " " + self.id
+
 
 class NodeAssigning(Node):
     def __init__(self, left_side, right_side):
         self.left_side = left_side
         self.right_side = right_side
+
+    def getGeneratedText(self):
+        return self.left_side.getGeneratedText() + " = " + self.right_side.getGeneratedText() + ";"
 
 
 class NodeMethod(Node):
@@ -68,6 +81,9 @@ class NodeMethod(Node):
         self.id = _id
         self.formal_params = formal_params
         self.block = block
+
+    def getGeneratedText(self):
+        return self.access_mod + " " + self.ret_type + " " + self.id + "(" + self.formal_params.getGeneratedText() + ") " + "\n{\n" + self.block.getGeneratedText() + "}"
 
 
 class NodeSequence(Node):
@@ -81,11 +97,18 @@ class NodeParams(Node):
 
 
 class NodeFormalParams(NodeParams):
-    pass
+    def getGeneratedText(self):
+        s = ""
+        for item in self.params:
+            s += item.getGeneratedText() + ", "
+        return s[:-2]
 
 
 class NodeActualParams(NodeParams):
-    pass
+    def getGeneratedText(self):
+        s = ""
+        for item in self.params:
+            s += item.getGeneratedText() + ", "
 
 
 class NodeIfConstruction(Node):
@@ -94,16 +117,25 @@ class NodeIfConstruction(Node):
         self.block = block
         self.else_block = else_block
 
+    def getGeneratedText(self):
+        return "if (" + self.condition.getGeneratedText() + ") " + self.block.getGeneratedText() + " else " + self.else_block.getGeneratedText()
+
 
 class NodeWhileConstruction(Node):
     def __init__(self, condition, block):
         self.condition = condition
         self.block = block
 
+    def getGeneratedText(self):
+        return "while (" + self.condition.getGeneratedText() + ") " + self.block.getGeneratedText()
+
 
 class NodeReturnStatement(Node):
     def __init__(self, expression):
         self.expression = expression
+
+    def getGeneratedText(self):
+        return "return " + self.expression.getGeneratedText() + ";"
 
 
 class NodeLiteral(Node):
@@ -111,10 +143,15 @@ class NodeLiteral(Node):
         self.type = _type
         self.value = value
 
+    def getGeneratedText(self):
+        if self.type is None:
+            return self.value.getGeneratedText()
+        return self.value
 
 
 class NodeStringLiteral(NodeLiteral):
-    pass
+    def getGeneratedText(self):
+        return '"' + self.value + '"'
 
 
 class NodeIntLiteral(NodeLiteral):
@@ -129,6 +166,9 @@ class NodeVar(Node):
     def __init__(self, _id, _type):
         self.id = _id
         self.type = _type
+
+    def getGeneratedText(self):
+        return self.id + " " + self.type
 
 
 class NodeAtomType(Node):
@@ -158,75 +198,126 @@ class NodeUnaryOperator(Node):
     def __init__(self, operand):
         self.operand = operand
 
+    def getGeneratedText(self):
+        return self.operand.getGeneratedText()
+
 
 class NodeUnaryMinus(NodeUnaryOperator):
-    pass
+    def getGeneratedText(self):
+        return "-" + self.operand.getGeneratedText()
 
 
 class NodeNot(NodeUnaryOperator):
-    pass
+    def getGeneratedText(self):
+        return "!" + self.operand.getGeneratedText()
 
 
 class NodeBinaryOperator(Node):
-    def __init__(self, left, right):
+    def __init__(self, left, right, operator=""):
         self.left = left
         self.right = right
+        self.operator = operator
+
+    def getGeneratedText(self):
+        return "(" + self.left.getGeneratedText() + " " + self.operator + " " + self.right.getGeneratedText() + ")"
 
 
 class NodeL(NodeBinaryOperator):
-    pass
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+        self.operator = "<"
 
 
 class NodeG(NodeBinaryOperator):
-    pass
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+        self.operator = ">"
 
 
 class NodeLE(NodeBinaryOperator):
-    pass
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+        self.operator = "<="
 
 
 class NodeGE(NodeBinaryOperator):
-    pass
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+        self.operator = ">="
 
 
 class NodeEQ(NodeBinaryOperator):
-    pass
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+        self.operator = "=="
 
 
 class NodeNEQ(NodeBinaryOperator):
-    pass
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+        self.operator = "<>"
 
 
 class NodeOr(NodeBinaryOperator):
-    pass
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+        self.operator = "||"
 
 
 class NodeAnd(NodeBinaryOperator):
-    pass
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+        self.operator = "&&"
 
 
 class NodePlus(NodeBinaryOperator):
-    pass
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+        self.operator = "+"
 
 
 class NodeMinus(NodeBinaryOperator):
-    pass
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+        self.operator = "-"
 
 
 class NodeDivision(NodeBinaryOperator):
-    pass
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+        self.operator = "/"
 
 
 class NodeMultiply(NodeBinaryOperator):
-    pass
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+        self.operator = "*"
 
 
 class NodeIDivision(NodeBinaryOperator):
-    pass
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+        self.operator = "//"
 
 
 class NodeMod(NodeBinaryOperator):
-    pass
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+        self.operator = "%"
 
 
 class Parser:
@@ -339,7 +430,8 @@ class Parser:
                 self.next_token()
                 if self.token.value.lower() in help.DATA_TYPES or self.token.value == "ID":
                     # Добавляем переменную в таблицу символов
-                    self.symbolTable[len(self.symbolTable) - 1].table[_id] = data_type
+                    self.symbolTable[len(self.symbolTable) -
+                                     1].table[_id] = data_type
                     left_side = NodeDeclaration(data_type, _id)
                     right_side = NodeIntLiteral(self.expression(data_type))
                     return NodeAssigning(left_side, right_side)
@@ -395,7 +487,7 @@ class Parser:
         # переменные: <type> <id> =? <right_side>?;
         # массивы: <type>[] <id> =? { <constants>? ,? }
         if self.token.name in help.DATA_TYPES:
-            return  self.declaration()
+            return self.declaration()
         # Обрабатываем ситуации, когда меняем значение переменной
         elif self.token.value == "ID":
             pass
@@ -434,7 +526,8 @@ class Parser:
             self.next_token()
 
             # Добавляем нашу функцию в таблицу символов
-            self.symbolTable[len(self.symbolTable) - 1].table[_id] = ret_type.lower()
+            self.symbolTable[len(self.symbolTable) -
+                             1].table[_id] = ret_type.lower()
 
             if self.token.name != "(":
                 self.error(SyntaxErrors.MissingSpecSymbol("("))
