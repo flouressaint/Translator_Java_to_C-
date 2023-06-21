@@ -83,7 +83,7 @@ class NodeMethod(Node):
         self.block = block
 
     def getGeneratedText(self):
-        return self.access_mod + " " + self.ret_type + " " + self.id + "(" + self.formal_params.getGeneratedText() + ") " + "\n{\n" + self.block.getGeneratedText() + "}"
+        return self.access_mod.lower() + " " + self.ret_type.lower() + " " + self.id + "(" + self.formal_params.getGeneratedText() + ") " + "\n{\n" + self.block.getGeneratedText() + "}"
 
 
 class NodeSequence(Node):
