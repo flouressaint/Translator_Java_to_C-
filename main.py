@@ -2,7 +2,8 @@ from Parser_java import *
 
 
 def main():
-    prs = Parser(Lexer("./input.txt"))
+    l = Lexer("./input.txt")
+    prs = Parser(l)
     print(prs.parse())
 
 

@@ -32,7 +32,7 @@ class Node:
                 if isinstance(attrs[attr_name], Token):
                     res += f"{attr_name}: {attrs[attr_name]}\n"
                 else:
-                    res += f"{attr_name}: {attrs[attr_name].__repr__(level+1)}"
+                    res += f"{attr_name}: {attrs[attr_name].__repr__()}"
         return res
 
 
@@ -110,7 +110,6 @@ class NodeLiteral(Node):
     def __init__(self, value, _type=None):
         self.type = _type
         self.value = value
-
 
 
 class NodeStringLiteral(NodeLiteral):
@@ -259,9 +258,12 @@ class Parser:
         # переменная, функция или массив.
         elif self.token.value == "ID":
             # Проверяем есть переменная в таблице символов, т.е. объявлена ли она
+            f = False
             for table in self.symbolTable:
-                if self.token.name not in table.table:
-                    self.error(SemanticErrors.UnknowingIdentifier())
+                if self.token.name in table.table:
+                    f = True
+            if not f:
+                self.error(SemanticErrors.UnknowingIdentifier())
             # Берем следующий токен
             self.next_token()
             # Если следующий токен это (, то значит операндом является функция
@@ -395,7 +397,7 @@ class Parser:
         # переменные: <type> <id> =? <right_side>?;
         # массивы: <type>[] <id> =? { <constants>? ,? }
         if self.token.name in help.DATA_TYPES:
-            return  self.declaration()
+            return self.declaration()
         # Обрабатываем ситуации, когда меняем значение переменной
         elif self.token.value == "ID":
             pass
@@ -498,7 +500,7 @@ class SemanticErrors:
 
     @staticmethod
     def AlreadyDeclared():
-        return "Variable already declared"
+        return "Identifier already declared"
 
     @staticmethod
     def TypeMismatch():
