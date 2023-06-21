@@ -3,4 +3,4 @@ class CodeGenerator:
         self.source = source
 
     def __repr__(self) -> str:
-        return self.source.getGeneratedText()
+        return self.source.headerProgram + "\n{\n" + self.source.getGeneratedText() + "}"

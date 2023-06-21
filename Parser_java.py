@@ -41,6 +41,11 @@ class Node:
 
 
 class NodeProgram(Node):
+    headerProgram = ""
+
+    def setHeader(self, header):
+        self.headerProgram = header
+
     def getGeneratedText(self):
         s = ""
         for item in self.children:
@@ -83,7 +88,10 @@ class NodeMethod(Node):
         self.block = block
 
     def getGeneratedText(self):
-        return self.access_mod.lower() + " " + self.ret_type.lower() + " " + self.id + "(" + self.formal_params.getGeneratedText() + ") " + "\n{\n" + self.block.getGeneratedText() + "}"
+        return self.access_mod.lower() + " " +\
+               self.ret_type.lower() + " " +\
+               self.id + "(" + self.formal_params.getGeneratedText() + ") " +\
+               "\n{\n" + self.block.getGeneratedText() + "}"
 
 
 class NodeSequence(Node):
@@ -118,7 +126,8 @@ class NodeIfConstruction(Node):
         self.else_block = else_block
 
     def getGeneratedText(self):
-        return "if (" + self.condition.getGeneratedText() + ") " + self.block.getGeneratedText() + " else " + self.else_block.getGeneratedText()
+        return "if (" + self.condition.getGeneratedText() + ") " +\
+               self.block.getGeneratedText() + " else " + self.else_block.getGeneratedText()
 
 
 class NodeWhileConstruction(Node):
@@ -147,6 +156,7 @@ class NodeLiteral(Node):
         if self.type is None:
             return self.value.getGeneratedText()
         return self.value
+
 
 class NodeStringLiteral(NodeLiteral):
     def getGeneratedText(self):
@@ -218,7 +228,8 @@ class NodeBinaryOperator(Node):
         self.operator = operator
 
     def getGeneratedText(self):
-        return "(" + self.left.getGeneratedText() + " " + self.operator + " " + self.right.getGeneratedText() + ")"
+        return "(" + self.left.getGeneratedText() + " " +\
+               self.operator + " " + self.right.getGeneratedText() + ")"
 
 
 class NodeL(NodeBinaryOperator):
@@ -558,6 +569,7 @@ class Parser:
             self.error("File is empty!")
         else:
             statements = []
+            header = ""  # Для заголовка нашего класса
             '''
             Сначала разбираем строку вида: public class <ID> {,
             потому что наш парсер поддерживает только один класс.
@@ -568,14 +580,17 @@ class Parser:
             self.next_token()
             if self.token.name not in help.KEY_WORDS:
                 self.error("Missing keyword: class")
+            # Запоминаем ключевое слово class
+            header += "class "
             self.next_token()
             if self.token.value != "ID":
                 self.error(SyntaxErrors.MissingID())
+            # Запоминаем название нашего класса
+            header += f"{self.token.name} "
             self.next_token()
             if self.token.name not in help.SPEC:
                 self.error("Expected '{'")
             self.next_token()
-
             '''
             Потом разбираем остальные инструкции в теле нашего класса
             '''
@@ -583,7 +598,9 @@ class Parser:
                 statements.append(self.statement())
                 if self.token.name == "}":
                     self.next_token()
-            return NodeProgram(statements)
+            nodeProgram = NodeProgram(statements)
+            nodeProgram.setHeader(header)
+            return nodeProgram
 
 
 class SemanticErrors:
