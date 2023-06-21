@@ -1,6 +1,12 @@
-public class hello {
-    public static void main() {
-        int a = 15;
-        int a = 1;
+public class HelloWorld {
+    public static void main(int b) {
+        int e = 1 * 2 / (-"3"+(2-1));
+        int a = 12 * 3 - 1;
+        string str = "lol";
+        int d = 1;
+    }
+    public static void lol(int x, int a) {
+        string str = "lol";
+        float b = 1.4;
     }
 }
