@@ -53,7 +53,9 @@ class help:
         "/=": "DIVISION",
         "%=": "MODULUS",
         "&&": "AND",
+        "&": "SHORT_AND",
         "||": "OR",
+        "|": "SHORT_OR",
         "!": "NOT",
     }
 

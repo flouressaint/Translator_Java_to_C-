@@ -2,7 +2,9 @@ from Parser_java import *
 
 
 def main():
-    prs = Parser(Lexer("./input.txt")).parse()
+    l = Lexer("./input.txt")
+    prs = Parser(l)
+    prs = prs.parse()
     # print(prs)
     cg = CodeGenerator(prs)
     print(cg)

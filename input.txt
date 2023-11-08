@@ -1,7 +1,13 @@
 public class HelloWorld {
     public static void main(int b) {
-        int e = 1 * 2 / (-"3"+(2-1));
         int a = 12 * 3 - 1;
+        a = 1 + (2 + 3);
+        a = 1 || 2 && 3;
+        if (a == 1) {
+            a = 1;
+            a = 12 * 3 - 1;
+        }
+        int e = 1 * 2 / (-"3"+(2-1));
         string str = "lol";
         int d = 1;
     }

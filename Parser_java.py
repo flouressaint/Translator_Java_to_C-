@@ -88,9 +88,9 @@ class NodeMethod(Node):
         self.block = block
 
     def getGeneratedText(self):
-        return self.access_mod.lower() + " " +\
-               self.ret_type.lower() + " " +\
-               self.id + "(" + self.formal_params.getGeneratedText() + ") " +\
+        return self.access_mod.lower() + " " + \
+               self.ret_type.lower() + " " + \
+               self.id + "(" + self.formal_params.getGeneratedText() + ") " + \
                "\n{\n" + self.block.getGeneratedText() + "}"
 
 
@@ -120,14 +120,15 @@ class NodeActualParams(NodeParams):
 
 
 class NodeIfConstruction(Node):
-    def __init__(self, condition, block, else_block):
+    def __init__(self, condition, block):
         self.condition = condition
         self.block = block
-        self.else_block = else_block
+        #self.else_block = else_block
 
     def getGeneratedText(self):
-        return "if (" + self.condition.getGeneratedText() + ") " +\
-               self.block.getGeneratedText() + " else " + self.else_block.getGeneratedText()
+        return "if (" + self.condition.getGeneratedText() + ") " + \
+               " {\n" + self.block.getGeneratedText() + "}\n"
+        #+ self.else_block.getGeneratedText()
 
 
 class NodeWhileConstruction(Node):
@@ -171,6 +172,10 @@ class NodeFloatLiteral(NodeLiteral):
     pass
 
 
+class NodeBooleanLiteral(NodeLiteral):
+    pass
+
+
 class NodeVar(Node):
     def __init__(self, _id, _type):
         self.id = _id
@@ -183,6 +188,9 @@ class NodeVar(Node):
 class NodeAtomType(Node):
     def __init__(self, _id):
         self.id = _id
+
+    def getGeneratedText(self):
+        return self.id + " "
 
 
 class NodeComplexType(Node):
@@ -228,7 +236,7 @@ class NodeBinaryOperator(Node):
         self.operator = operator
 
     def getGeneratedText(self):
-        return "(" + self.left.getGeneratedText() + " " +\
+        return "(" + self.left.getGeneratedText() + " " + \
                self.operator + " " + self.right.getGeneratedText() + ")"
 
 
@@ -271,7 +279,7 @@ class NodeNEQ(NodeBinaryOperator):
     def __init__(self, left, right):
         self.left = left
         self.right = right
-        self.operator = "<>"
+        self.operator = "!="
 
 
 class NodeOr(NodeBinaryOperator):
@@ -376,7 +384,10 @@ class Parser:
                 pass
             # Если не встретили ( и [, значит операндом является переменная
             else:
-                return NodeVar(first_token.name, first_token.value.lower())
+                if first_token.value == "ID":
+                    return NodeAtomType(first_token.name)
+                else:
+                    return NodeVar(first_token.name, first_token.value.lower())
         # Если операндом является (, то значит мы встретили скобку в выражении
         # и должны продолжить разбор выражения, но уже в скобках.
         elif self.token.name == "(":
@@ -391,6 +402,9 @@ class Parser:
         if self.token.name == "-":
             self.next_token()
             return NodeUnaryMinus(self.operand(_type))
+        elif self.token.name == "!":
+            self.next_token()
+            return NodeNot(self.operand(_type))
         else:
             return self.operand(_type)
 
@@ -399,7 +413,7 @@ class Parser:
     def term(self, _type) -> Node:
         left = self.factor(_type)
         op = self.token.name
-        while op in {"*", "/"}:
+        while op in {"*", "/", "<", ">", "==", "&&"}:
             self.next_token()
             if op == "*":
                 right = self.factor(_type)
@@ -407,6 +421,17 @@ class Parser:
             elif op == "/":
                 right = self.factor(_type)
                 left = NodeDivision(left, right)
+            elif op == "==":
+                right = self.factor(_type)
+                left = NodeEQ(left, right)
+            elif op == ">":
+                right = self.factor(_type)
+                left = NodeG(left, right)
+            elif op == "<":
+                right = self.factor(_type)
+                left = NodeL(left, right)
+            elif op == "&&":
+                left = NodeAnd(left, self.term(_type))
             op = self.token.name
         return left
 
@@ -415,12 +440,14 @@ class Parser:
     def expression(self, _type) -> Node:
         left = self.term(_type)
         op = self.token.name
-        while op in {"+", "-"}:
+        while op in {"+", "-", "||"}:
             self.next_token()
             if op == "+":
                 left = NodePlus(left, self.term(_type))
             elif op == "-":
                 left = NodeMinus(left, self.term(_type))
+            elif op == "||":
+                left = NodeOr(left, self.term(_type))
             op = self.token.name
         return left
 
@@ -433,7 +460,13 @@ class Parser:
         if self.token.value == "ID":
             # Проверяем объявлена ли уже переменная.
             # Если объявлена, то выкидываем ошибку.
-            if self.symbolTable[len(self.symbolTable) - 1].isExist(self.token.name):
+            #if self.symbolTable[len(self.symbolTable) - 1].isExist(self.token.name)
+                #self.error(SemanticErrors.AlreadyDeclared())
+            f = False
+            for table in self.symbolTable:
+                if self.token.name in table.table:
+                    f = True
+            if f:
                 self.error(SemanticErrors.AlreadyDeclared())
             # Сохраняем id переменной
             _id = self.token.name
@@ -443,8 +476,7 @@ class Parser:
                 self.next_token()
                 if self.token.value.lower() in help.DATA_TYPES or self.token.value == "ID":
                     # Добавляем переменную в таблицу символов
-                    self.symbolTable[len(self.symbolTable) -
-                                     1].table[_id] = data_type
+                    self.symbolTable[len(self.symbolTable) - 1].table[_id] = data_type
                     left_side = NodeDeclaration(data_type, _id)
                     right_side = NodeIntLiteral(self.expression(data_type))
                     return NodeAssigning(left_side, right_side)
@@ -465,10 +497,13 @@ class Parser:
             self.error(SyntaxErrors.DeclarationError())
 
     def block(self) -> Node:
+        #  Добавляем локальную таблицу символов
+        self.symbolTable.append(SymbolTable())
+
         statements = []
         while self.token.name not in {"}"}:
             statements.append(self.local_statement())
-            if self.token.name != ";":
+            if self.token.name != "}" and self.token.name != ";":
                 self.error(SyntaxErrors.MissingSpecSymbol(";"))
             self.next_token()
         # Удаляем локальную таблицу символов
@@ -503,11 +538,63 @@ class Parser:
             return self.declaration()
         # Обрабатываем ситуации, когда меняем значение переменной
         elif self.token.value == "ID":
-            pass
+            id = self.token
+            self.next_token()
+
+            #  Проверка на знак равенства
+            if self.token.name != "=":
+                self.error(SyntaxErrors.MissingSpecSymbol("="))
+            self.next_token()
+
+            #  Находим тип переменной
+            tp = ""
+            f = False
+            for table in self.symbolTable:
+                if id.name in table.table:
+                    tp = table.table[id.name]
+                    f = True
+
+            #  Разбираем правую часть
+            right = self.expression(tp)
+
+            return NodeAssigning(NodeAtomType(id.name), right)
         # Обрабатываем условия. Их грамматика:
         # if ( <expression> ) { <statements> }
         elif self.token.name == "if":
-            pass
+            #  Пропускаем if
+            self.next_token()
+
+            #  Проверяем наличие (
+            if self.token.name != "(":
+                self.error(SyntaxErrors.MissingSpecSymbol("("))
+            #  Пропускаем (
+            self.next_token()
+
+            #  Начинаем разбор выражения в скобках
+            expr = self.expression("boolean")
+
+            #  Проверяем наличие )
+            if self.token.name != ")":
+                self.error(SyntaxErrors.MissingSpecSymbol(")"))
+            #  Пропускаем )
+            self.next_token()
+
+            #  Проверяем наличие {
+            if self.token.name != "{":
+                self.error(SyntaxErrors.MissingSpecSymbol("{"))
+            #  Пропускаем {
+            self.next_token()
+
+            #  Начинаем разбор тела условия
+            block = self.block()
+
+            #  Проверяем наличие }
+            #if self.token.name != "}":
+             #   self.error(SyntaxErrors.MissingSpecSymbol("}"))
+            #  Пропускаем }
+            #self.next_token()
+
+            return NodeIfConstruction(expr, block)
         # Обрабатываем цикл while. Его грамматика:
         # while ( <expression> ) { <statements> }
         elif self.token.name == "while":
@@ -534,13 +621,19 @@ class Parser:
 
             if self.token.value != "ID":
                 self.error(SyntaxErrors.MissingID())
+            #  Проверяем не объявлен ли метод повторно
+            f = False
+            for table in self.symbolTable:
+                if self.token.name in table.table:
+                    f = True
+            if f:
+                self.error(SemanticErrors.AlreadyDeclared())
             # Сохраняем имя метода
             _id = self.token.name
             self.next_token()
 
             # Добавляем нашу функцию в таблицу символов
-            self.symbolTable[len(self.symbolTable) -
-                             1].table[_id] = ret_type.lower()
+            self.symbolTable[len(self.symbolTable) - 1].table[_id] = ret_type.lower()
 
             if self.token.name != "(":
                 self.error(SyntaxErrors.MissingSpecSymbol("("))
@@ -557,6 +650,9 @@ class Parser:
 
             # Начинаем разбор тела метода
             block = self.block()
+            #  Удаляем таблицу символов блока
+            self.symbolTable.pop()
+
             # Здесь должна быть проверка на наличие '}'
             if self.token.name != "}":
                 self.error(SyntaxErrors.MissingSpecSymbol("}"))
