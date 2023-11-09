@@ -7,9 +7,12 @@ public class HelloWorld {
             a = 1;
             a = 12 * 3 - 1;
         }
-        int e = 1 * 2 / (-"3"+(2-1));
         string str = "lol";
         int d = 1;
+        while (1 == a) {
+            a = a + 1;
+            a = a - 1;
+        }
     }
     public static void lol(int x, int a) {
         string str = "lol";

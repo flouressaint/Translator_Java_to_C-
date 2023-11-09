@@ -137,7 +137,8 @@ class NodeWhileConstruction(Node):
         self.block = block
 
     def getGeneratedText(self):
-        return "while (" + self.condition.getGeneratedText() + ") " + self.block.getGeneratedText()
+        return "while (" + self.condition.getGeneratedText() + ") " + \
+               "{\n" + self.block.getGeneratedText() + "}"
 
 
 class NodeReturnStatement(Node):
@@ -598,7 +599,34 @@ class Parser:
         # Обрабатываем цикл while. Его грамматика:
         # while ( <expression> ) { <statements> }
         elif self.token.name == "while":
-            pass
+            #  Пропускаем while
+            self.next_token()
+
+            #  Проверяем наличие (
+            if self.token.name != "(":
+                self.error(SyntaxErrors.MissingSpecSymbol("("))
+            #  Пропускаем (
+            self.next_token()
+
+            #  Начинаем разбор выражения в скобках
+            expr = self.expression("boolean")
+
+            #  Проверяем наличие )
+            if self.token.name != ")":
+                self.error(SyntaxErrors.MissingSpecSymbol(")"))
+            #  Пропускаем )
+            self.next_token()
+
+            #  Проверяем наличие {
+            if self.token.name != "{":
+                self.error(SyntaxErrors.MissingSpecSymbol("{"))
+            #  Пропускаем {
+            self.next_token()
+
+            #  Начинаем разбор тела условия
+            block = self.block()
+
+            return NodeWhileConstruction(expr, block)
 
     def statement(self) -> Node:
         # Разбор методов класса, его грамматика:
