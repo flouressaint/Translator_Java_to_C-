@@ -421,15 +421,15 @@ class Parser:
             elif op == "/":
                 right = self.factor(_type)
                 left = NodeDivision(left, right)
-            elif op == "==":
-                right = self.factor(_type)
-                left = NodeEQ(left, right)
             elif op == ">":
                 right = self.factor(_type)
                 left = NodeG(left, right)
             elif op == "<":
                 right = self.factor(_type)
                 left = NodeL(left, right)
+            elif op == "==":
+                right = self.factor(_type)
+                left = NodeEQ(left, right)
             elif op == "&&":
                 left = NodeAnd(left, self.term(_type))
             op = self.token.name
