@@ -1,4 +1,6 @@
 import sys
+import operator
+
 from Lexer_java import Lexer, Token, help
 from SymbolTable import SymbolTable
 from CodeGenerator import CodeGenerator
@@ -231,14 +233,32 @@ class NodeNot(NodeUnaryOperator):
 
 
 class NodeBinaryOperator(Node):
+    ops = {"+": operator.add,
+           "-": operator.sub,
+           "*": operator.mul,
+           "/": operator.truediv,
+           "%": operator.mod,
+           "==": operator.eq,
+           "!": operator.neg,
+           "&&": operator.and_,
+           "||": operator.or_,
+           "<": operator.ge,
+           ">": operator.gt}
+
     def __init__(self, left, right, operator=""):
         self.left = left
         self.right = right
         self.operator = operator
 
     def getGeneratedText(self):
+        #if isinstance(self.left, NodeLiteral) and isinstance(self.right, NodeLiteral):
+        #    if self.left.type == "int":
+        #        return str(self.ops[self.operator](int(self.left.value), int(self.right.value)))
+        #    elif self.left.type == "double":
+        #        return str(self.ops[self.operator](float(self.left.value), float(self.right.value)))
+        #else:
         return "(" + self.left.getGeneratedText() + " " + \
-               self.operator + " " + self.right.getGeneratedText() + ")"
+                self.operator + " " + self.right.getGeneratedText() + ")"
 
 
 class NodeL(NodeBinaryOperator):
@@ -340,6 +360,33 @@ class NodeMod(NodeBinaryOperator):
 
 
 class Parser:
+    ops = {"+": operator.add,
+           "-": operator.sub,
+           "*": operator.mul,
+           "/": operator.truediv,
+           "%": operator.mod,
+           "==": operator.eq,
+           "!": operator.neg,
+           "&&": operator.and_,
+           "||": operator.or_,
+           "<": operator.ge,
+           ">": operator.gt}
+
+    typeNode = {"+": NodePlus,
+                "-": NodeMinus,
+                "*": NodeMultiply,
+                "/": NodeDivision,
+                "%": NodeMod,
+                "==": NodeEQ,
+                "!": NodeNot,
+                "&&": NodeAnd,
+                "||": NodeOr,
+                "<": NodeL,
+                ">": NodeG,
+                "int": NodeIntLiteral,
+                "double": NodeFloatLiteral,
+                "string": NodeStringLiteral}
+
     def __init__(self, lexer: Lexer):
         self.lexer = lexer
         self.token = self.lexer.get_next_token()
@@ -355,11 +402,18 @@ class Parser:
 
     def operand(self, _type) -> Node:
         first_token = self.token
+
         # Определяем тип операнда
         if self.token.value.lower() == "int":
+            # Проверка на совпадение типов
+            if _type != "boolean" and self.token.value.lower() != _type:
+                self.error(SemanticErrors.TypeMismatch())
             self.next_token()
             return NodeIntLiteral(first_token.name, first_token.value.lower())
         elif self.token.value.lower() == "double":
+            # Проверка на совпадение типов
+            if _type != "boolean" and self.token.value.lower() != _type:
+                self.error(SemanticErrors.TypeMismatch())
             self.next_token()
             return NodeFloatLiteral(first_token.name, first_token.value.lower())
         elif self.token.value.lower() == "string":
@@ -410,45 +464,63 @@ class Parser:
             return self.operand(_type)
 
     # Этот метод обрабатывает арифметическое выражение.
-    # А именно выражение с операциями * и /.
+    # А именно выражение с операциями "*", "/", "<", ">", "==", "&&".
     def term(self, _type) -> Node:
         left = self.factor(_type)
         op = self.token.name
+
         while op in {"*", "/", "<", ">", "==", "&&"}:
             self.next_token()
-            if op == "*":
-                right = self.factor(_type)
-                left = NodeMultiply(left, right)
-            elif op == "/":
-                right = self.factor(_type)
-                left = NodeDivision(left, right)
-            elif op == ">":
-                right = self.factor(_type)
-                left = NodeG(left, right)
-            elif op == "<":
-                right = self.factor(_type)
-                left = NodeL(left, right)
-            elif op == "==":
-                right = self.factor(_type)
-                left = NodeEQ(left, right)
-            elif op == "&&":
-                left = NodeAnd(left, self.term(_type))
+            right = self.factor(_type)
+            if isinstance(left, NodeLiteral) and isinstance(right, NodeLiteral):
+                if _type == "int":
+                    if op == "&&":
+                        self.error(SemanticErrors.InvalidOperation())
+                    left = self.typeNode[_type](str(self.ops[op](int(left.value), int(right.value))), _type)
+                elif _type == "double":
+                    if op == "&&":
+                        self.error(SemanticErrors.InvalidOperation())
+                    left = self.typeNode[_type](str(self.ops[op](float(left.value), float(right.value))), _type)
+                elif _type == "boolean":
+                    left = self.typeNode[op](left, right)
+                else:
+                    self.error(SemanticErrors.InvalidOperation())
+            else:
+                left = self.typeNode[op](left, right)
             op = self.token.name
         return left
 
     # Этот метод обрабатывает арифметические выражения.
-    # А именно выражения с операциями + и -.
+    # А именно выражения с операциями "+", "-", "||".
     def expression(self, _type) -> Node:
         left = self.term(_type)
         op = self.token.name
+
         while op in {"+", "-", "||"}:
             self.next_token()
-            if op == "+":
-                left = NodePlus(left, self.term(_type))
-            elif op == "-":
-                left = NodeMinus(left, self.term(_type))
-            elif op == "||":
-                left = NodeOr(left, self.term(_type))
+            right = self.term(_type)
+            if isinstance(left, NodeLiteral) and isinstance(right, NodeLiteral):
+                if _type == "int":
+                    if op != "||":
+                        left = self.typeNode[_type](str(self.ops[op](int(left.value), int(right.value))), _type)
+                    else:
+                        self.error(SemanticErrors.InvalidOperation())
+                elif _type == "double":
+                    if op != "||":
+                        left = self.typeNode[_type](str(self.ops[op](float(left.value), float(right.value))), _type)
+                    else:
+                        self.error(SemanticErrors.InvalidOperation())
+                elif _type == "string":
+                    if op == "+":
+                        left = self.typeNode[_type](str(self.ops[op](left.value, right.value)), _type)
+                    else:
+                        self.error(SemanticErrors.InvalidOperation())
+                elif _type == "boolean":
+                    left = self.typeNode[op](left, right)
+                else:
+                    self.error(SemanticErrors.InvalidOperation())
+            else:
+                left = self.typeNode[op](left, right)
             op = self.token.name
         return left
 
@@ -549,11 +621,9 @@ class Parser:
 
             #  Находим тип переменной
             tp = ""
-            f = False
             for table in self.symbolTable:
                 if id.name in table.table:
                     tp = table.table[id.name]
-                    f = True
 
             #  Разбираем правую часть
             right = self.expression(tp)
@@ -739,6 +809,10 @@ class SemanticErrors:
     @staticmethod
     def TypeMismatch():
         return "Types of operands are different"
+
+    @staticmethod
+    def InvalidOperation():
+        return "Ti blya eblan operator dlya tipov dannih ne opredelen"
 
 
 class SyntaxErrors:
