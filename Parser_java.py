@@ -812,7 +812,7 @@ class SemanticErrors:
 
     @staticmethod
     def InvalidOperation():
-        return "Ti blya eblan operator dlya tipov dannih ne opredelen"
+        return "Operator do not have declaration for current datatype"
 
 
 class SyntaxErrors:
