@@ -68,7 +68,8 @@ class help:
         "}": "RIGHT_CURL_BRACKET",
         ".": "DOT",
         ";": "SEMICOLON",
-        ",": "COMMA"
+        ",": "COMMA",
+        "//": "DOUBLE_SLASH"
     }
 
     IGNORE = ["\n", " ", "\t", ":"]
@@ -86,9 +87,10 @@ class Token:
 class Lexer:
     text = ""
     flow_lexem = []
-    START, EOF, STRING, CHAR, OPERATOR, ID, INT, DOUBLE, BOOLEAN = range(9)
+    START, COMMENT, EOF, STRING, CHAR, OPERATOR, ID, INT, DOUBLE, BOOLEAN = range(10)
     STATES = {
         START: "START",
+        COMMENT: "COMMENT",
         EOF: "EOF",
         STRING: "string",
         CHAR: "char",
@@ -143,7 +145,7 @@ class Lexer:
         while self.state is not None and self.state != Lexer.EOF:
             while ch in help.IGNORE:
                 ch = self.get_char()
-            
+
             """
             Для определения string
             """
@@ -188,10 +190,15 @@ class Lexer:
                 while self.state is not None:
                     accum += ch
                     ch = self.get_char()
+                    if accum == "//":
+                        while ch != "\n":
+                            ch = self.get_char()
                     if ch == ";" or ch not in help.OPERATORS:
                         self.state = None
                 self.pos -= 1
-                if accum in help.OPERATORS:
+                if accum == "//":
+                    self.state = Lexer.COMMENT
+                elif accum in help.OPERATORS:
                     return Token(accum, help.OPERATORS[accum])
                 else:
                     raise SyntaxError.SyntaxError("operator", self.lineno, self.position)
