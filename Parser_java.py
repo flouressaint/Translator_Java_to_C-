@@ -59,10 +59,6 @@ class NodeBlock(NodeProgram):
     pass
 
 
-class NodeElseBlock(NodeBlock):
-    pass
-
-
 class NodeDeclaration(Node):
     def __init__(self, _type, _id):
         self.type = _type
@@ -121,16 +117,28 @@ class NodeActualParams(NodeParams):
             s += item.getGeneratedText() + ", "
 
 
-class NodeIfConstruction(Node):
-    def __init__(self, condition, block):
-        self.condition = condition
+class NodeElseBlock(NodeBlock):
+    def __int__(self, block):
         self.block = block
-        #self.else_block = else_block
 
     def getGeneratedText(self):
-        return "if (" + self.condition.getGeneratedText() + ") " + \
-               " {\n" + self.block.getGeneratedText() + "}\n"
-        #+ self.else_block.getGeneratedText()
+        return "{\n" + self.block.getGeneratedText() + "}\n"
+
+
+class NodeIfConstruction(Node):
+    def __init__(self, condition, block, else_block=None):
+        self.condition = condition
+        self.block = block
+        self.else_block = else_block
+
+    def getGeneratedText(self):
+        if self.else_block is None:
+            return "if (" + self.condition.getGeneratedText() + ") " + \
+                   " {\n" + self.block.getGeneratedText() + "}\n"
+        else:
+            return "if (" + self.condition.getGeneratedText() + ") " + \
+                   " {\n" + self.block.getGeneratedText() + "}\n" + \
+                   "else {\n" + self.else_block.getGeneratedText() + "}\n"
 
 
 class NodeWhileConstruction(Node):
@@ -397,7 +405,7 @@ class Parser:
         self.token = self.lexer.get_next_token()
 
     def error(self, msg):
-        print(f'Ошибка синтаксического анализа ({self.lexer.pos}): {msg}')
+        print(f'Ошибка синтаксического анализа: {msg}')
         sys.exit(1)
 
     def operand(self, _type) -> Node:
@@ -407,13 +415,13 @@ class Parser:
         if self.token.value.lower() == "int":
             # Проверка на совпадение типов
             if _type != "boolean" and self.token.value.lower() != _type:
-                self.error(SemanticErrors.TypeMismatch())
+                self.error(SemanticErrors.TypeMismatch(self.lexer.lineno, self.lexer.position))
             self.next_token()
             return NodeIntLiteral(first_token.name, first_token.value.lower())
         elif self.token.value.lower() == "double":
             # Проверка на совпадение типов
             if _type != "boolean" and self.token.value.lower() != _type:
-                self.error(SemanticErrors.TypeMismatch())
+                self.error(SemanticErrors.TypeMismatch(self.lexer.lineno, self.lexer.position))
             self.next_token()
             return NodeFloatLiteral(first_token.name, first_token.value.lower())
         elif self.token.value.lower() == "string":
@@ -428,7 +436,7 @@ class Parser:
                 if self.token.name in table.table:
                     f = True
             if not f:
-                self.error(SemanticErrors.UnknowingIdentifier())
+                self.error(SemanticErrors.UnknowingIdentifier(self.lexer.lineno, self.lexer.position))
             # Берем следующий токен
             self.next_token()
             # Если следующий токен это (, то значит операндом является функция
@@ -475,16 +483,16 @@ class Parser:
             if isinstance(left, NodeLiteral) and isinstance(right, NodeLiteral):
                 if _type == "int":
                     if op == "&&":
-                        self.error(SemanticErrors.InvalidOperation())
+                        self.error(SemanticErrors.InvalidOperation(self.lexer.lineno, self.lexer.position))
                     left = self.typeNode[_type](str(self.ops[op](int(left.value), int(right.value))), _type)
                 elif _type == "double":
                     if op == "&&":
-                        self.error(SemanticErrors.InvalidOperation())
+                        self.error(SemanticErrors.InvalidOperation(self.lexer.lineno, self.lexer.position))
                     left = self.typeNode[_type](str(self.ops[op](float(left.value), float(right.value))), _type)
                 elif _type == "boolean":
                     left = self.typeNode[op](left, right)
                 else:
-                    self.error(SemanticErrors.InvalidOperation())
+                    self.error(SemanticErrors.InvalidOperation(self.lexer.lineno, self.lexer.position))
             else:
                 left = self.typeNode[op](left, right)
             op = self.token.name
@@ -504,21 +512,21 @@ class Parser:
                     if op != "||":
                         left = self.typeNode[_type](str(self.ops[op](int(left.value), int(right.value))), _type)
                     else:
-                        self.error(SemanticErrors.InvalidOperation())
+                        self.error(SemanticErrors.InvalidOperation(self.lexer.lineno, self.lexer.position))
                 elif _type == "double":
                     if op != "||":
                         left = self.typeNode[_type](str(self.ops[op](float(left.value), float(right.value))), _type)
                     else:
-                        self.error(SemanticErrors.InvalidOperation())
+                        self.error(SemanticErrors.InvalidOperation(self.lexer.lineno, self.lexer.position))
                 elif _type == "string":
                     if op == "+":
                         left = self.typeNode[_type](str(self.ops[op](left.value, right.value)), _type)
                     else:
-                        self.error(SemanticErrors.InvalidOperation())
+                        self.error(SemanticErrors.InvalidOperation(self.lexer.lineno, self.lexer.position))
                 elif _type == "boolean":
                     left = self.typeNode[op](left, right)
                 else:
-                    self.error(SemanticErrors.InvalidOperation())
+                    self.error(SemanticErrors.InvalidOperation(self.lexer.lineno, self.lexer.position))
             else:
                 left = self.typeNode[op](left, right)
             op = self.token.name
@@ -540,7 +548,7 @@ class Parser:
                 if self.token.name in table.table:
                     f = True
             if f:
-                self.error(SemanticErrors.AlreadyDeclared())
+                self.error(SemanticErrors.AlreadyDeclared(self.lexer.lineno, self.lexer.position))
             # Сохраняем id переменной
             _id = self.token.name
             self.next_token()
@@ -560,14 +568,14 @@ class Parser:
         elif self.token.name == "[":
             self.next_token()
             if self.token.name != "]":
-                self.error(SyntaxErrors.MissingSpecSymbol("]"))
+                self.error(SyntaxErrors.MissingSpecSymbol("]", self.lexer.lineno, self.lexer.position))
             self.next_token()
             if self.token.value != "ID":
-                self.error(SyntaxErrors.MissingID())
+                self.error(SyntaxErrors.MissingID(self.lexer.lineno, self.lexer.position))
             _id = self.token.name
             self.next_token()
         else:
-            self.error(SyntaxErrors.DeclarationError())
+            self.error(SyntaxErrors.DeclarationError(self.lexer.lineno, self.lexer.position))
 
     def block(self) -> Node:
         #  Добавляем локальную таблицу символов
@@ -576,8 +584,11 @@ class Parser:
         statements = []
         while self.token.name not in {"}"}:
             statements.append(self.local_statement())
-            if self.token.name != "}" and self.token.name != ";":
-                self.error(SyntaxErrors.MissingSpecSymbol(";"))
+            if statements[len(statements) - 1]:
+                print()
+                pass
+            if self.token.name != ";":
+                self.error(SyntaxErrors.MissingSpecSymbol(";", self.lexer.lineno, self.lexer.position))
             self.next_token()
         # Удаляем локальную таблицу символов
         self.symbolTable.pop()
@@ -593,7 +604,7 @@ class Parser:
             # Это и есть наш один формальный параметр.
             params.append(self.declaration())
             if self.token.name != "," and self.token.name != ")":
-                self.error(SyntaxErrors.MissingSpecSymbol(","))
+                self.error(SyntaxErrors.MissingSpecSymbol(",", self.lexer.lineno, self.lexer.position))
             if self.token.name == ",":
                 self.next_token()
         # Добавляем локальную таблицу символов аргументы функции
@@ -616,7 +627,7 @@ class Parser:
 
             #  Проверка на знак равенства
             if self.token.name != "=":
-                self.error(SyntaxErrors.MissingSpecSymbol("="))
+                self.error(SyntaxErrors.MissingSpecSymbol("=", self.lexer.lineno, self.lexer.position))
             self.next_token()
 
             #  Находим тип переменной
@@ -630,14 +641,14 @@ class Parser:
 
             return NodeAssigning(NodeAtomType(id.name), right)
         # Обрабатываем условия. Их грамматика:
-        # if ( <expression> ) { <statements> }
+        # if ( <expression> ) { <statements> } else { <statements> }
         elif self.token.name == "if":
             #  Пропускаем if
             self.next_token()
 
             #  Проверяем наличие (
             if self.token.name != "(":
-                self.error(SyntaxErrors.MissingSpecSymbol("("))
+                self.error(SyntaxErrors.MissingSpecSymbol("(", self.lexer.lineno, self.lexer.position))
             #  Пропускаем (
             self.next_token()
 
@@ -646,26 +657,48 @@ class Parser:
 
             #  Проверяем наличие )
             if self.token.name != ")":
-                self.error(SyntaxErrors.MissingSpecSymbol(")"))
+                self.error(SyntaxErrors.MissingSpecSymbol(")", self.lexer.lineno, self.lexer.position))
             #  Пропускаем )
             self.next_token()
 
             #  Проверяем наличие {
             if self.token.name != "{":
-                self.error(SyntaxErrors.MissingSpecSymbol("{"))
+                self.error(SyntaxErrors.MissingSpecSymbol("{", self.lexer.lineno, self.lexer.position))
             #  Пропускаем {
             self.next_token()
 
             #  Начинаем разбор тела условия
             block = self.block()
 
-            #  Проверяем наличие }
-            #if self.token.name != "}":
-             #   self.error(SyntaxErrors.MissingSpecSymbol("}"))
-            #  Пропускаем }
-            #self.next_token()
+            # Проверяем наличие }
+            if self.token.name != "}":
+                self.error(SyntaxErrors.MissingSpecSymbol("}", self.lexer.lineno, self.lexer.position))
+            # Пропускаем }
+            self.next_token()
 
-            return NodeIfConstruction(expr, block)
+            else_block = None
+            # Проверяем наличие else
+            if self.token.name == "else":
+                # пропускаем else
+                self.next_token()
+
+                #  Проверяем наличие {
+                if self.token.name != "{":
+                    self.error(SyntaxErrors.MissingSpecSymbol("{", self.lexer.lineno, self.lexer.position))
+                self.next_token()
+
+                #  Начинаем разбор тела условия
+                else_block = self.block()
+
+                # Проверяем наличие }
+                if self.token.name != "}":
+                    self.error(SyntaxErrors.MissingSpecSymbol("}", self.lexer.lineno, self.lexer.position))
+                self.next_token()
+
+            if else_block is not None:
+                return NodeIfConstruction(expr, block, else_block)
+            else:
+                return NodeIfConstruction(expr, block)
         # Обрабатываем цикл while. Его грамматика:
         # while ( <expression> ) { <statements> }
         elif self.token.name == "while":
@@ -674,7 +707,7 @@ class Parser:
 
             #  Проверяем наличие (
             if self.token.name != "(":
-                self.error(SyntaxErrors.MissingSpecSymbol("("))
+                self.error(SyntaxErrors.MissingSpecSymbol("(", self.lexer.lineno, self.lexer.position))
             #  Пропускаем (
             self.next_token()
 
@@ -683,18 +716,23 @@ class Parser:
 
             #  Проверяем наличие )
             if self.token.name != ")":
-                self.error(SyntaxErrors.MissingSpecSymbol(")"))
+                self.error(SyntaxErrors.MissingSpecSymbol(")", self.lexer.lineno, self.lexer.position))
             #  Пропускаем )
             self.next_token()
 
             #  Проверяем наличие {
             if self.token.name != "{":
-                self.error(SyntaxErrors.MissingSpecSymbol("{"))
+                self.error(SyntaxErrors.MissingSpecSymbol("{", self.lexer.lineno, self.lexer.position))
             #  Пропускаем {
             self.next_token()
 
             #  Начинаем разбор тела условия
             block = self.block()
+
+            # Проверяем наличие }
+            if self.token.name != "}":
+                self.error(SyntaxErrors.MissingSpecSymbol("}", self.lexer.lineno, self.lexer.position))
+            self.next_token()
 
             return NodeWhileConstruction(expr, block)
 
@@ -708,24 +746,24 @@ class Parser:
 
             # Проверяем ключевое слово static
             if self.token.name not in help.KEY_WORDS:
-                self.error("Excepted key word: static")
+                self.error(f"Excepted key word: static in line {self.lexer.lineno} on position {self.lexer.position}")
             self.next_token()
 
             if self.token.name not in help.DATA_TYPES:
-                self.error(SyntaxErrors.MissingDataType())
+                self.error(SyntaxErrors.MissingDataType(self.lexer.lineno, self.lexer.position))
             # Сохраняем возвращаемый тип данных
             ret_type = self.token.value
             self.next_token()
 
             if self.token.value != "ID":
-                self.error(SyntaxErrors.MissingID())
+                self.error(SyntaxErrors.MissingID(self.lexer.lineno, self.lexer.position))
             #  Проверяем не объявлен ли метод повторно
             f = False
             for table in self.symbolTable:
                 if self.token.name in table.table:
                     f = True
             if f:
-                self.error(SemanticErrors.AlreadyDeclared())
+                self.error(SemanticErrors.AlreadyDeclared(self.lexer.lineno, self.lexer.position))
             # Сохраняем имя метода
             _id = self.token.name
             self.next_token()
@@ -734,7 +772,7 @@ class Parser:
             self.symbolTable[len(self.symbolTable) - 1].table[_id] = ret_type.lower()
 
             if self.token.name != "(":
-                self.error(SyntaxErrors.MissingSpecSymbol("("))
+                self.error(SyntaxErrors.MissingSpecSymbol("(", self.lexer.lineno, self.lexer.position))
             # Пропускаем круглую скобку
             self.next_token()
 
@@ -742,7 +780,7 @@ class Parser:
             formal_params = self.formal_params()
             # Здесь должна быть проверка на наличие {
             if self.token.name != "{":
-                self.error(SyntaxErrors.MissingSpecSymbol("{"))
+                self.error(SyntaxErrors.MissingSpecSymbol("{", self.lexer.lineno, self.lexer.position))
             # Пропускаем }
             self.next_token()
 
@@ -753,7 +791,7 @@ class Parser:
 
             # Здесь должна быть проверка на наличие '}'
             if self.token.name != "}":
-                self.error(SyntaxErrors.MissingSpecSymbol("}"))
+                self.error(SyntaxErrors.MissingSpecSymbol("}", self.lexer.lineno, self.lexer.position))
             # Пропускаем }
             self.next_token()
             return NodeMethod(access_mod, ret_type, _id, formal_params, block)
@@ -770,20 +808,21 @@ class Parser:
             В итоге наш разбор заканчивается на токене следующим за {.
             '''
             if self.token.name not in help.ACCESS_MODIFIERS:
-                self.error("Missing access modifiers: public")
+                self.error(f"Missing access modifiers: public in line {self.lexer.lineno} on position {self.lexer.position}")
             self.next_token()
             if self.token.name not in help.KEY_WORDS:
-                self.error("Missing keyword: class")
+                self.error(f"Missing keyword: class in line {self.lexer.lineno} on position {self.lexer.position}")
             # Запоминаем ключевое слово class
             header += "class "
             self.next_token()
             if self.token.value != "ID":
-                self.error(SyntaxErrors.MissingID())
+                self.error(SyntaxErrors.MissingID(self.lexer.lineno, self.lexer.position))
             # Запоминаем название нашего класса
             header += f"{self.token.name} "
             self.next_token()
             if self.token.name not in help.SPEC:
-                self.error("Expected '{'")
+                a = "{"
+                self.error(f"Expected '{a}' in line {self.lexer.lineno} on position {self.lexer.position}")
             self.next_token()
             '''
             Потом разбираем остальные инструкции в теле нашего класса
@@ -799,35 +838,35 @@ class Parser:
 
 class SemanticErrors:
     @staticmethod
-    def UnknowingIdentifier():
-        return "Using unknowing identifier"
+    def UnknowingIdentifier(line, pos):
+        return f"Using unknowing identifier in line {line} on position {pos}"
 
     @staticmethod
-    def AlreadyDeclared():
-        return "Identifier already declared"
+    def AlreadyDeclared(line, pos):
+        return f"Identifier already declared in line {line} on position {pos}"
 
     @staticmethod
-    def TypeMismatch():
-        return "Types of operands are different"
+    def TypeMismatch(line, pos):
+        return f"Types of operands are different in line {line} on position {pos}"
 
     @staticmethod
-    def InvalidOperation():
-        return "Operator do not have declaration for current datatype"
+    def InvalidOperation(line, pos):
+        return f"Operator do not have declaration for current datatype in line {line} on position {pos}"
 
 
 class SyntaxErrors:
     @staticmethod
-    def DeclarationError():
-        return "Declaration error"
+    def DeclarationError(line, pos):
+        return f"Declaration error in line {line} on position {pos}"
 
     @staticmethod
-    def MissingID():
-        return "Missing identifier"
+    def MissingID(line, pos):
+        return f"Missing identifier in line {line} on position {pos}"
 
     @staticmethod
-    def MissingSpecSymbol(text):
-        return "Missing special symbol {}".format(text)
+    def MissingSpecSymbol(text, line, pos):
+        return f"Missing special symbol {text} in line {line} on position {pos}"
 
     @staticmethod
-    def MissingDataType():
-        return "Missing declaration data type"
+    def MissingDataType(line, pos):
+        return f"Missing declaration data type in line {line} on position {pos}"

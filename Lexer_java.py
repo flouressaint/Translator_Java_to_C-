@@ -106,6 +106,8 @@ class Lexer:
         self.state = None
         self.source = source
         self.pos = -1
+        self.position = -1
+        self.lineno = 1
         self.len = len(self.text)
 
     """
@@ -116,6 +118,7 @@ class Lexer:
     """
     def get_char(self):
         self.pos += 1
+        self.position += 1
         if self.pos < self.len:
             return self.text[self.pos]
         else:
@@ -129,6 +132,9 @@ class Lexer:
         accum = ""  # накапливает символы из текста программы
         self.state = Lexer.START  # начальный статус
         ch = self.get_char()
+        if ch == "\n":
+            self.lineno += 1
+            self.position = 1
 
         """
         Разбираем текст программы до тех пор, пока наш статус не
@@ -161,7 +167,7 @@ class Lexer:
                 accum += ch
                 ch = self.get_char()
                 if ch != "'":
-                    raise SyntaxError("Invalid DATA_TYPES: CHAR")
+                    raise SyntaxError.SyntaxError("char", self.lineno, self.position)
                 else:
                     return Token(accum, help.DATA_TYPES[Lexer.STATES[Lexer.CHAR]])
 
@@ -188,7 +194,7 @@ class Lexer:
                 if accum in help.OPERATORS:
                     return Token(accum, help.OPERATORS[accum])
                 else:
-                    raise SyntaxError("Invalid operator {}".format(self.pos))
+                    raise SyntaxError.SyntaxError("operator", self.lineno, self.position)
 
             """
             Если первым символом встретили букву, то переходим в состояние "ID" и начинаем собирать
@@ -232,7 +238,7 @@ class Lexer:
                     ch = self.get_char()
                     if ch == ".":
                         if self.state == Lexer.DOUBLE:
-                            raise SyntaxError("Invalid data type: double {}".format(self.pos))
+                            raise SyntaxError.SyntaxError("double", self.lineno, self.position)
                         self.state = Lexer.DOUBLE
                         accum += ch
                         ch = self.get_char()
@@ -247,13 +253,13 @@ class Lexer:
                         self.state = None
                     elif not ch.isnumeric():
                         if self.state == Lexer.DOUBLE:
-                            raise SyntaxError("Invalid data type: double {}".format(self.pos))
+                            raise SyntaxError.SyntaxError("double", self.lineno, self.position)
                         else:
-                            raise SyntaxError("Invalid data type integer {}".format(self.pos))
+                            raise SyntaxError.SyntaxError("integer", self.lineno, self.position)
 
                 # Если наше число заканчивается на точку, то выкидываем ошибку
                 if accum[len(accum) - 1] == ".":
-                    raise SyntaxError("Invalid real number, in position {}".format(self.pos))
+                    raise SyntaxError.SyntaxError("real number", self.lineno, self.position)
 
                 self.pos -= 1
                 if "." in accum:
@@ -280,4 +286,6 @@ class Lexer:
 
 
 class SyntaxError(BaseException):
-    pass
+    @staticmethod
+    def SyntaxError(text, line, pos):
+        return f"Syntax error: {text} in line {line} position {pos}"
