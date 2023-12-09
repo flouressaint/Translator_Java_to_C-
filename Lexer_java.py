@@ -111,7 +111,7 @@ class Lexer:
         self.source = source
         self.pos = -1
         self.position = -1
-        self.lineno = 1
+        self.lineno = 0
         self.len = len(self.text)
 
     """
@@ -136,9 +136,6 @@ class Lexer:
         accum = ""  # накапливает символы из текста программы
         self.state = Lexer.START  # начальный статус
         ch = self.get_char()
-        if ch == "\n":
-            self.lineno += 1
-            self.position = 1
 
         """
         Разбираем текст программы до тех пор, пока наш статус не
@@ -146,6 +143,9 @@ class Lexer:
         """
         while self.state is not None and self.state != Lexer.EOF:
             while ch in help.IGNORE:
+                if ch == "\n":
+                    self.lineno += 1
+                    self.position = -1
                 ch = self.get_char()
 
             """
@@ -226,6 +226,12 @@ class Lexer:
                     elif accum in help.DATA_TYPES:
                         return Token(accum, help.DATA_TYPES[accum])
                     ch = self.get_char()
+                    if accum in {"System", "System.out"} and ch == ".":
+                        accum += ch
+                        ch = self.get_char()
+                        if ch == "l":
+                            accum += ch
+                
                 self.pos -= 1
                 if accum == "false" or accum == "true":
                     return Token(accum, help.DATA_TYPES[Lexer.STATES[Lexer.BOOLEAN]])

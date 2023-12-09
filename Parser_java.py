@@ -59,6 +59,15 @@ class NodeBlock(NodeProgram):
     pass
 
 
+class NodeSystemOutPrint(NodeProgram):
+    def __init__(self, header, expression):
+        self.header = header
+        self.expression = expression
+    
+    def getGeneratedText(self):
+        return self.header + "(" + self.expression + ");\n"
+
+
 class NodeDeclaration(Node):
     def __init__(self, _type, _id):
         self.type = _type
@@ -578,8 +587,6 @@ class Parser:
             self.error(SyntaxErrors.DeclarationError(self.lexer.lineno, self.lexer.position))
 
     def block(self) -> Node:
-
-
         #  Добавляем локальную таблицу символов
         self.symbolTable.append(SymbolTable())
 
@@ -627,6 +634,15 @@ class Parser:
         # Обрабатываем ситуации, когда меняем значение переменной
         elif self.token.value == "ID":
             id = self.token
+            
+            # Проверяем на существование переменной
+            f = False
+            for table in self.symbolTable:
+                if self.token.name in table.table:
+                    f = True
+            if not f:
+                self.error(SemanticErrors.UnknowingIdentifier(self.token.name, self.lexer.lineno, self.lexer.position))
+            
             self.next_token()
 
             #  Проверка на знак равенства
@@ -737,6 +753,31 @@ class Parser:
             self.next_token()
 
             return NodeWhileConstruction(expr, block)
+        
+        # Разбор готовый функций
+        # Грамматика:
+        # System.out.print(<expression>)
+        elif self.token.name == "System.out.print" or self.token.name == "System.out.println":
+            # Сохранаяем вид метода
+            header = self.token.name
+
+            # Пропускаем System.out.print или System.out.println
+            self.next_token()
+
+            # Проверяем (
+            if self.token.name != "(":
+                self.error(SyntaxError.MissingSpecSymbol("(", self.lexer.lineno, self.lexer.position))
+            self.next_token()
+
+            # Разбор выражения в скобках
+            expr = self.expression("boolean")
+
+            # Проверяем )
+            if self.token.name != ")":
+                self.error(SyntaxError.MissingSpecSymbol(")", self.lexer.lineno, self.lexer.position))
+            self.next_token()
+
+            return NodeSystemOutPrint(header, expr)
 
     def statement(self) -> Node:
         # Разбор методов класса, его грамматика:
@@ -840,8 +881,8 @@ class Parser:
 
 class SemanticErrors:
     @staticmethod
-    def UnknowingIdentifier(line, pos):
-        return f"Using unknowing identifier in line {line} on position {pos}"
+    def UnknowingIdentifier(id, line, pos):
+        return f"Using unknowing identifier {id} in line {line} on position {pos}"
 
     @staticmethod
     def AlreadyDeclared(line, pos):
