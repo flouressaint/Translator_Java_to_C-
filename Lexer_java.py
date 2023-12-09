@@ -17,6 +17,8 @@ class help:
         "static": "STATIC",
         "this": "THIS",
         "while": "WHILE",
+        "System.out.print": "SYSTEM.OUT.PRINT",
+        "System.out.println": "SYSTEM.OUT.PRINTLN",
     }
 
     DATA_TYPES = {
@@ -197,6 +199,7 @@ class Lexer:
                         self.state = None
                 self.pos -= 1
                 if accum == "//":
+                    accum = ""
                     self.state = Lexer.COMMENT
                 elif accum in help.OPERATORS:
                     return Token(accum, help.OPERATORS[accum])
