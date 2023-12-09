@@ -578,15 +578,19 @@ class Parser:
             self.error(SyntaxErrors.DeclarationError(self.lexer.lineno, self.lexer.position))
 
     def block(self) -> Node:
+
+
         #  Добавляем локальную таблицу символов
         self.symbolTable.append(SymbolTable())
 
         statements = []
         while self.token.name not in {"}"}:
             statements.append(self.local_statement())
-            if statements[len(statements) - 1]:
-                print()
-                pass
+
+            if isinstance(statements[len(statements) - 1], NodeIfConstruction) or\
+                isinstance(statements[len(statements) - 1], NodeWhileConstruction):
+                continue
+
             if self.token.name != ";":
                 self.error(SyntaxErrors.MissingSpecSymbol(";", self.lexer.lineno, self.lexer.position))
             self.next_token()
@@ -676,29 +680,27 @@ class Parser:
             # Пропускаем }
             self.next_token()
 
-            else_block = None
             # Проверяем наличие else
-            if self.token.name == "else":
-                # пропускаем else
-                self.next_token()
-
-                #  Проверяем наличие {
-                if self.token.name != "{":
-                    self.error(SyntaxErrors.MissingSpecSymbol("{", self.lexer.lineno, self.lexer.position))
-                self.next_token()
-
-                #  Начинаем разбор тела условия
-                else_block = self.block()
-
-                # Проверяем наличие }
-                if self.token.name != "}":
-                    self.error(SyntaxErrors.MissingSpecSymbol("}", self.lexer.lineno, self.lexer.position))
-                self.next_token()
-
-            if else_block is not None:
-                return NodeIfConstruction(expr, block, else_block)
-            else:
+            if self.token.name != "else":
                 return NodeIfConstruction(expr, block)
+            
+            # пропускаем else
+            self.next_token()
+
+            #  Проверяем наличие {
+            if self.token.name != "{":
+                self.error(SyntaxErrors.MissingSpecSymbol("{", self.lexer.lineno, self.lexer.position))
+            self.next_token()
+
+            #  Начинаем разбор тела условия
+            else_block = self.block()
+
+            # Проверяем наличие }
+            if self.token.name != "}":
+                self.error(SyntaxErrors.MissingSpecSymbol("}", self.lexer.lineno, self.lexer.position))
+            self.next_token()
+
+            return NodeIfConstruction(expr, block, else_block)
         # Обрабатываем цикл while. Его грамматика:
         # while ( <expression> ) { <statements> }
         elif self.token.name == "while":
