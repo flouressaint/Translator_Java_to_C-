@@ -1,5 +1,9 @@
 public class HelloWorld {
     public static void main(int b) {
+        System.out.print(b);
+        System.out.println(123 + 123);
+        
+
         string str = "lol" + "22";
 
         int s = 1;

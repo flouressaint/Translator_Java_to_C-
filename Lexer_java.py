@@ -219,6 +219,18 @@ class Lexer:
                 while ch.isalnum():
                     self.state = Lexer.ID
                     accum += ch
+
+                    if accum == "System.out.print":
+                        ch = self.get_char()
+                        if ch == "l":
+                            accum += ch
+                            ch = self.get_char()
+                            accum += ch
+                            return Token(accum, help.KEY_WORDS[accum])
+                        else:
+                            self.pos -= 1
+                            return Token(accum, help.KEY_WORDS[accum])
+
                     if accum in help.ACCESS_MODIFIERS:
                         return Token(accum, help.ACCESS_MODIFIERS[accum])
                     elif accum in help.KEY_WORDS:
@@ -229,8 +241,6 @@ class Lexer:
                     if accum in {"System", "System.out"} and ch == ".":
                         accum += ch
                         ch = self.get_char()
-                        if ch == "l":
-                            accum += ch
                 
                 self.pos -= 1
                 if accum == "false" or accum == "true":

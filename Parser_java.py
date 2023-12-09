@@ -65,7 +65,7 @@ class NodeSystemOutPrint(NodeProgram):
         self.expression = expression
     
     def getGeneratedText(self):
-        return self.header + "(" + self.expression + ");\n"
+        return self.header + "(" + self.expression.getGeneratedText() + ");\n"
 
 
 class NodeDeclaration(Node):
@@ -829,6 +829,7 @@ class Parser:
 
             # Начинаем разбор тела метода
             block = self.block()
+
             #  Удаляем таблицу символов блока
             self.symbolTable.pop()
 
