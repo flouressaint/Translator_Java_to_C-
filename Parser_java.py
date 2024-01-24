@@ -156,6 +156,21 @@ class NodeWhileConstruction(Node):
                "{\n" + self.block.getGeneratedText() + "}"
 
 
+class NodeForConstruction(Node):
+    def __init__(self, variable_declarator, expression, increment, block):
+        self.var_declr = variable_declarator
+        self.expr = expression
+        self.incr = increment
+        self.block = block
+
+    def getGeneratedText(self):
+        return "for (" + self.var_declr.getGeneratedText() + \
+               self.expr.getGeneratedText() + ";" + \
+               self.incr.getGeneratedText() + ") {\n" + \
+               self.block.getGeneratedText() + "}"
+        
+
+
 class NodeReturnStatement(Node):
     def __init__(self, expression):
         self.expression = expression
@@ -233,6 +248,14 @@ class NodeUnaryOperator(Node):
 
     def getGeneratedText(self):
         return self.operand.getGeneratedText()
+
+
+class NodeIncrement(Node):
+    def __init__(self, _id):
+        self.id = _id
+
+    def getGeneratedText(self):
+        return self.id + "++"
 
 
 class NodeUnaryMinus(NodeUnaryOperator):
@@ -563,8 +586,10 @@ class Parser:
                 if self.token.value.lower() in help.DATA_TYPES or self.token.value == "ID":
                     # Добавляем переменную в таблицу символов
                     self.symbolTable[len(self.symbolTable) - 1].table[_id] = data_type
+
                     left_side = NodeDeclaration(data_type, _id)
                     right_side = NodeIntLiteral(self.expression(data_type))
+
                     return NodeAssigning(left_side, right_side)
             # Добавляем переменную в таблицу символов
             self.symbolTable[len(self.symbolTable) - 1].table[_id] = data_type
@@ -582,6 +607,21 @@ class Parser:
         else:
             self.error(SyntaxErrors.DeclarationError(self.lexer.lineno, self.lexer.position))
 
+    # Этот метод обрабатывает инкремент: <increment> ::= <identifier>++
+    def increment(self) -> Node:
+        if self.token.value != "ID":
+            self.error(SyntaxErrors.MissingID(self.lexer.lineno, self.lexer.position))
+        
+        _id = self.token.name
+        self.next_token()
+
+        if self.token.name != "++":
+            self.error(SyntaxErrors.MissingSpecSymbol("++", self.lexer.lineno, self.lexer.position))
+        self.next_token()
+
+        return NodeIncrement(_id)
+
+
     def block(self) -> Node:
         #  Добавляем локальную таблицу символов
         self.symbolTable.append(SymbolTable())
@@ -591,7 +631,8 @@ class Parser:
             statements.append(self.local_statement())
 
             if isinstance(statements[len(statements) - 1], NodeIfConstruction) or\
-                isinstance(statements[len(statements) - 1], NodeWhileConstruction):
+               isinstance(statements[len(statements) - 1], NodeWhileConstruction) or\
+               isinstance(statements[len(statements) - 1], NodeForConstruction):
                 continue
 
             if self.token.name != ";":
@@ -713,6 +754,64 @@ class Parser:
             self.next_token()
 
             return NodeIfConstruction(expr, block, else_block)
+        # Обрабатываем цикл for. Его грамматика:
+        # for ( <variable declarator> ; <expression> ; <increment> ) { <statement> }
+        elif self.token.name == "for":
+            # пропускаем for
+            self.next_token()
+
+            #  Проверяем наличие (
+            if self.token.name != "(":
+                self.error(SyntaxErrors.MissingSpecSymbol("(", self.lexer.lineno, self.lexer.position))
+            #  Пропускаем (
+            self.next_token()
+
+            # Начинаем разбор <variable declarator>
+            variable_declarator = self.local_statement()
+
+            #  Проверяем наличие ;
+            if self.token.name != ";":
+                self.error(SyntaxErrors.MissingSpecSymbol(";", self.lexer.lineno, self.lexer.position))
+            #  Пропускаем ;
+            self.next_token()
+
+            # Начинаем проверять выражение
+            expr = self.expression("boolean")
+
+            #  Проверяем наличие ;
+            if self.token.name != ";":
+                self.error(SyntaxErrors.MissingSpecSymbol(";", self.lexer.lineno, self.lexer.position))
+            #  Пропускаем ;
+            self.next_token()
+
+            # Разбираем инкремент
+            incr = self.increment()
+
+            # Проверяем, что перменная в объявлении цикла совпадает с переменной в инкременте
+            if incr.id != variable_declarator.left_side.id:
+                self.error(SemanticErrors.InvalidOperation(self.lexer.lineno, self.lexer.position))
+
+            #  Проверяем наличие )
+            if self.token.name != ")":
+                self.error(SyntaxErrors.MissingSpecSymbol(")", self.lexer.lineno, self.lexer.position))
+            #  Пропускаем )
+            self.next_token()
+
+            #  Проверяем наличие {
+            if self.token.name != "{":
+                self.error(SyntaxErrors.MissingSpecSymbol("{", self.lexer.lineno, self.lexer.position))
+            #  Пропускаем {
+            self.next_token()
+
+            block = self.block()
+
+            # Проверяем наличие }
+            if self.token.name != "}":
+                self.error(SyntaxErrors.MissingSpecSymbol("}", self.lexer.lineno, self.lexer.position))
+            self.next_token()
+
+            return NodeForConstruction(variable_declarator, expr, incr, block)
+
         # Обрабатываем цикл while. Его грамматика:
         # while ( <expression> ) { <statements> }
         elif self.token.name == "while":

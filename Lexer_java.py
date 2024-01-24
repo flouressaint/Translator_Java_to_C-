@@ -1,4 +1,3 @@
-# import re
 class help:
     ACCESS_MODIFIERS = {
         "public": "PUBLIC",
