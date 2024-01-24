@@ -4,6 +4,10 @@ import operator
 from Lexer_java import Lexer, Token, help
 from SymbolTable import SymbolTable
 from CodeGenerator import CodeGenerator
+from difflib import SequenceMatcher
+
+def similar(a, b):
+    return SequenceMatcher(None, a, b).ratio()
 
 
 class Node:
@@ -464,7 +468,7 @@ class Parser:
                 if self.token.name in table.table:
                     f = True
             if not f:
-                self.error(SemanticErrors.UnknowingIdentifier(self.lexer.lineno, self.lexer.position))
+                self.error(SemanticErrors.UnknowingIdentifier(self.token.name, self.lexer.lineno, self.lexer.position, "variable"))
             # Берем следующий токен
             self.next_token()
             # Если следующий токен это (, то значит операндом является функция
@@ -678,7 +682,8 @@ class Parser:
                 if self.token.name in table.table:
                     f = True
             if not f:
-                self.error(SemanticErrors.UnknowingIdentifier(self.token.name, self.lexer.lineno, self.lexer.position))
+                expectedWord = self.findExpectedWord(self.token.name)
+                self.error(SemanticErrors.UnknowingIdentifier(self.token.name, self.lexer.lineno, self.lexer.position, expectedWord))
             
             self.next_token()
 
@@ -861,7 +866,7 @@ class Parser:
 
             # Проверяем (
             if self.token.name != "(":
-                self.error(SyntaxError.MissingSpecSymbol("(", self.lexer.lineno, self.lexer.position))
+                self.error(SyntaxErrors.MissingSpecSymbol("(", self.lexer.lineno, self.lexer.position))
             self.next_token()
 
             # Разбор выражения в скобках
@@ -869,7 +874,7 @@ class Parser:
 
             # Проверяем )
             if self.token.name != ")":
-                self.error(SyntaxError.MissingSpecSymbol(")", self.lexer.lineno, self.lexer.position))
+                self.error(SyntaxErrors.MissingSpecSymbol(")", self.lexer.lineno, self.lexer.position))
             self.next_token()
 
             return NodeSystemOutPrint(header, expr)
@@ -973,12 +978,31 @@ class Parser:
             nodeProgram = NodeProgram(statements)
             nodeProgram.setHeader(header)
             return nodeProgram
-
+        
+    def findExpectedWord(self, word) -> str:
+                expectedWord = ""
+                maxSimilar = 0
+                for acc in help.ACCESS_MODIFIERS:
+                    sim = similar(str(word), str(acc))
+                    if sim > maxSimilar:
+                        expectedWord = acc
+                        maxSimilar = sim
+                for acc in help.KEY_WORDS:
+                    sim = similar(str(word), str(acc))
+                    if sim > maxSimilar:
+                        expectedWord = acc
+                        maxSimilar = sim
+                for acc in help.DATA_TYPES:
+                    sim = similar(str(word), str(acc))
+                    if sim > maxSimilar:
+                        expectedWord = acc
+                        maxSimilar = sim
+                return expectedWord
 
 class SemanticErrors:
     @staticmethod
-    def UnknowingIdentifier(id, line, pos):
-        return f"Using unknowing identifier {id} in line {line} on position {pos}"
+    def UnknowingIdentifier(id, line, pos, expectedWord):
+        return f"Using unknowing identifier '{id}' in line {line} on position {pos}. Expected '{expectedWord}'"
 
     @staticmethod
     def AlreadyDeclared(line, pos):
@@ -1004,7 +1028,7 @@ class SyntaxErrors:
 
     @staticmethod
     def MissingSpecSymbol(text, line, pos):
-        return f"Missing special symbol {text} in line {line} on position {pos}"
+        return f"Missing special symbol '{text}' in line {line} on position {pos}"
 
     @staticmethod
     def MissingDataType(line, pos):
