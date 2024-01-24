@@ -59,7 +59,7 @@ class NodeBlock(NodeProgram):
     pass
 
 
-class NodeSystemOutPrint(NodeProgram):
+class NodeSystemOutPrint(Node):
     def __init__(self, header, expression):
         self.header = header
         self.expression = expression
@@ -127,11 +127,7 @@ class NodeActualParams(NodeParams):
 
 
 class NodeElseBlock(NodeBlock):
-    def __int__(self, block):
-        self.block = block
-
-    def getGeneratedText(self):
-        return "{\n" + self.block.getGeneratedText() + "}\n"
+    pass
 
 
 class NodeIfConstruction(Node):

@@ -19,7 +19,7 @@ public class HelloWorld {
 
         s = 1;
         
-        if (a == 1) {
+        if (a < 1) {
             int d = 1;
         }
 
