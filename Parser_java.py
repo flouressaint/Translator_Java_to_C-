@@ -17,9 +17,11 @@ class Node:
         return f"{c[pos_1:pos_2]}"
 
     def __repr__(self, level=0):
-        attrs = self.__dict__  # словарь атрибут : значение
+        # словарь атрибут : значение
         # если атрибут один и тип его значения - это список,
         # то это узел некоторой последовательности (подпрограмма, либо список)
+        attrs = self.__dict__
+        
         if len(attrs) == 1 and isinstance(list(attrs.values())[0], list):
             is_sequence = True
         else:
@@ -160,6 +162,27 @@ class NodeWhileConstruction(Node):
                "{\n" + self.block.getGeneratedText() + "}"
 
 
+class NodeSwitchConstruction(Node):
+    def __init__(self, tok, cases: list, blocks: list):
+        self.tok = tok
+        self.cases = cases
+        self.blocks = blocks
+    
+    def getGeneratedText(self):
+        s = "switch (" + self.tok + ") {\n"
+        for i in range(len(self.cases)):
+            s += "case " + self.cases[i].name + ":\n"
+            if self.blocks[i] != "":
+                s += self.blocks[i].getGeneratedText()
+            s += "break;\n"
+        s += "default:\n"
+        if self.blocks[len(self.blocks) - 1] != "":
+            s += self.blocks[len(self.blocks) - 1].getGeneratedText()
+        s += "break;\n" + "}\n"
+        return s
+            
+
+
 class NodeReturnStatement(Node):
     def __init__(self, expression):
         self.expression = expression
@@ -210,7 +233,7 @@ class NodeAtomType(Node):
         self.id = _id
 
     def getGeneratedText(self):
-        return self.id + " "
+        return self.id
 
 
 class NodeComplexType(Node):
@@ -250,17 +273,19 @@ class NodeNot(NodeUnaryOperator):
 
 
 class NodeBinaryOperator(Node):
-    ops = {"+": operator.add,
-           "-": operator.sub,
-           "*": operator.mul,
-           "/": operator.truediv,
-           "%": operator.mod,
-           "==": operator.eq,
-           "!": operator.neg,
-           "&&": operator.and_,
-           "||": operator.or_,
-           "<": operator.ge,
-           ">": operator.gt}
+    ops = {
+        "+": operator.add,
+        "-": operator.sub,
+        "*": operator.mul,
+        "/": operator.truediv,
+        "%": operator.mod,
+        "==": operator.eq,
+        "!": operator.neg,
+        "&&": operator.and_,
+        "||": operator.or_,
+        "<": operator.ge,
+        ">": operator.gt
+    }
 
     def __init__(self, left, right, operator=""):
         self.left = left
@@ -377,32 +402,36 @@ class NodeMod(NodeBinaryOperator):
 
 
 class Parser:
-    ops = {"+": operator.add,
-           "-": operator.sub,
-           "*": operator.mul,
-           "/": operator.truediv,
-           "%": operator.mod,
-           "==": operator.eq,
-           "!": operator.neg,
-           "&&": operator.and_,
-           "||": operator.or_,
-           "<": operator.ge,
-           ">": operator.gt}
+    ops = {
+        "+": operator.add,
+        "-": operator.sub,
+        "*": operator.mul,
+        "/": operator.truediv,
+        "%": operator.mod,
+        "==": operator.eq,
+        "!": operator.neg,
+        "&&": operator.and_,
+        "||": operator.or_,
+        "<": operator.ge,
+        ">": operator.gt
+    }
 
-    typeNode = {"+": NodePlus,
-                "-": NodeMinus,
-                "*": NodeMultiply,
-                "/": NodeDivision,
-                "%": NodeMod,
-                "==": NodeEQ,
-                "!": NodeNot,
-                "&&": NodeAnd,
-                "||": NodeOr,
-                "<": NodeL,
-                ">": NodeG,
-                "int": NodeIntLiteral,
-                "double": NodeFloatLiteral,
-                "string": NodeStringLiteral}
+    typeNode = {
+        "+": NodePlus,
+        "-": NodeMinus,
+        "*": NodeMultiply,
+        "/": NodeDivision,
+        "%": NodeMod,
+        "==": NodeEQ,
+        "!": NodeNot,
+        "&&": NodeAnd,
+        "||": NodeOr,
+        "<": NodeL,
+        ">": NodeG,
+        "int": NodeIntLiteral,
+        "double": NodeFloatLiteral,
+        "string": NodeStringLiteral
+    }
 
     def __init__(self, lexer: Lexer):
         self.lexer = lexer
@@ -569,6 +598,8 @@ class Parser:
                     self.symbolTable[len(self.symbolTable) - 1].table[_id] = data_type
                     left_side = NodeDeclaration(data_type, _id)
                     right_side = NodeIntLiteral(self.expression(data_type))
+                    if left_side.type != right_side.value.type:
+                        self.error(SyntaxErrors.DeclarationError(self.lexer.lineno, self.lexer.position))
                     return NodeAssigning(left_side, right_side)
             # Добавляем переменную в таблицу символов
             self.symbolTable[len(self.symbolTable) - 1].table[_id] = data_type
@@ -591,11 +622,12 @@ class Parser:
         self.symbolTable.append(SymbolTable())
 
         statements = []
-        while self.token.name not in {"}"}:
+        while self.token.name not in {"}", "break"}:
             statements.append(self.local_statement())
 
             if isinstance(statements[len(statements) - 1], NodeIfConstruction) or\
-                isinstance(statements[len(statements) - 1], NodeWhileConstruction):
+                isinstance(statements[len(statements) - 1], NodeWhileConstruction) or\
+                isinstance(statements[len(statements) - 1], NodeSwitchConstruction):
                 continue
 
             if self.token.name != ";":
@@ -753,6 +785,131 @@ class Parser:
             self.next_token()
 
             return NodeWhileConstruction(expr, block)
+        # Обрабатываем switch statement
+        # Гамматика:
+        # switch ( <expression> : str, int ) {
+            # case value1: <statement> break;
+            # case value2: <statement> break;
+            # ...
+            # default: <statement> break;
+        # }
+        elif self.token.name == "switch":
+            # Список тел блоков case и default
+            blocks = list()
+            cases = list()
+            
+            # Пропускаем switch
+            self.next_token()
+            
+            #  Проверяем наличие (
+            if self.token.name != "(":
+                self.error(SyntaxErrors.MissingSpecSymbol("(", self.lexer.lineno, self.lexer.position))
+            #  Пропускаем (
+            self.next_token()
+            
+            #  Начинаем разбор выражения в скобках
+            if self.token.value != "ID" and\
+               self.token.value != "INT" and\
+               self.token.value != "STRING":
+                self.error(SyntaxErrors.MissingDataType(self.lexer.lineno, self.lexer.position))
+            tok = self.token.name
+            
+            t = ""
+            if self.token.value == "ID":
+                for table in self.symbolTable:
+                    if self.token.name in table.table:
+                        t = table.table[self.token.name]
+                        break
+            else:
+                t = self.token.value
+            self.next_token()
+            
+            #  Проверяем наличие )
+            if self.token.name != ")":
+                self.error(SyntaxErrors.MissingSpecSymbol(")", self.lexer.lineno, self.lexer.position))
+            #  Пропускаем )
+            self.next_token()
+            
+            #  Проверяем наличие {
+            if self.token.name != "{":
+                self.error(SyntaxErrors.MissingSpecSymbol("{", self.lexer.lineno, self.lexer.position))
+            #  Пропускаем {
+            self.next_token()
+            
+            while self.token.name != "default":
+                # Проверяем наличие case
+                if self.token.name != "case":
+                    self.error(SyntaxErrors.MissingSpecSymbol("case", self.lexer.lineno, self.lexer.position))
+                # Пропускаем case
+                self.next_token()
+                
+                # Проверяем тип value
+                if self.token.value != "INT" and self.token.value != "STRING":
+                    self.error(SyntaxErrors.MissingDataType(self.lexer.lineno, self.lexer.position))
+                if self.token.value.lower() != t:
+                    self.error(SyntaxErrors.MissingDataType(self.lexer.lineno, self.lexer.position))
+                cases.append(self.token)
+                # Пропускаем value
+                self.next_token()
+                
+                # Проверяем наличие :
+                if self.token.name != ":":
+                    self.error(SyntaxErrors.MissingSpecSymbol(":", self.lexer.lineno, self.lexer.position))
+                # Пропускаем :
+                self.next_token()
+                
+                # Разбор тела case
+                if self.token.name != "break":
+                    blocks.append(self.block())
+                else:
+                    blocks.append("")
+                
+                # Проверяем наличие break
+                if self.token.name != "break":
+                    self.error(SyntaxErrors.MissingSpecSymbol("break", self.lexer.lineno, self.lexer.position))
+                # Пропускаем break
+                self.next_token()
+                
+                # Проверяем наличие ;
+                if self.token.name != ";":
+                    self.error(SyntaxErrors.MissingSpecSymbol(";", self.lexer.lineno, self.lexer.position))
+                # Пропускаем ;
+                self.next_token()
+            
+            # Пропускаем default
+            self.next_token()
+            
+            # Проверяем наличие :
+            if self.token.name != ":":
+                self.error(SyntaxErrors.MissingSpecSymbol(":", self.lexer.lineno, self.lexer.position))
+            # Пропускаем :
+            self.next_token()
+            
+            # Разбор тела default
+            if self.token.name != "break":
+                blocks.append(self.block())
+            else:
+                blocks.append("")
+            
+            # Проеряем наличие break
+            if self.token.name != "break":
+                self.error(SyntaxErrors.MissingSpecSymbol("break", self.lexer.lineno, self.lexer.position))
+            # Пропускаем break
+            self.next_token()
+            
+            # Проверяем наличие ;
+            if self.token.name != ";":
+                self.error(SyntaxErrors.MissingSpecSymbol(";", self.lexer.lineno, self.lexer.position))
+            # Пропускаем ;
+            self.next_token()
+            
+            # Проверяем наличие }
+            if self.token.name != "}":
+                self.error(SyntaxErrors.MissingSpecSymbol("}", self.lexer.lineno, self.lexer.position))
+            # Пропускаем }
+            self.next_token()
+            
+            return NodeSwitchConstruction(tok, cases, blocks)
         
         # Разбор готовый функций
         # Грамматика:
@@ -766,7 +923,7 @@ class Parser:
 
             # Проверяем (
             if self.token.name != "(":
-                self.error(SyntaxError.MissingSpecSymbol("(", self.lexer.lineno, self.lexer.position))
+                self.error(SyntaxErrors.MissingSpecSymbol("(", self.lexer.lineno, self.lexer.position))
             self.next_token()
 
             # Разбор выражения в скобках
@@ -774,7 +931,7 @@ class Parser:
 
             # Проверяем )
             if self.token.name != ")":
-                self.error(SyntaxError.MissingSpecSymbol(")", self.lexer.lineno, self.lexer.position))
+                self.error(SyntaxErrors.MissingSpecSymbol(")", self.lexer.lineno, self.lexer.position))
             self.next_token()
 
             return NodeSystemOutPrint(header, expr)

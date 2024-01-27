@@ -1,4 +1,3 @@
-# import re
 class help:
     ACCESS_MODIFIERS = {
         "public": "PUBLIC",
@@ -19,6 +18,9 @@ class help:
         "while": "WHILE",
         "System.out.print": "SYSTEM.OUT.PRINT",
         "System.out.println": "SYSTEM.OUT.PRINTLN",
+        "switch": "SWITCH",
+        "case": "CASE",
+        "default": "DEFAULT"
     }
 
     DATA_TYPES = {
@@ -59,6 +61,7 @@ class help:
         "||": "OR",
         "|": "SHORT_OR",
         "!": "NOT",
+        ":": "DOUBLE_DOT",
     }
 
     SPEC = {
@@ -74,7 +77,7 @@ class help:
         "//": "DOUBLE_SLASH"
     }
 
-    IGNORE = ["\n", " ", "\t", ":"]
+    IGNORE = ["\n", " ", "\t"]
 
 
 class Token:
@@ -133,8 +136,10 @@ class Lexer:
         Возвращает 
     '''
     def get_next_token(self):
-        accum = ""  # накапливает символы из текста программы
-        self.state = Lexer.START  # начальный статус
+        # накапливает символы из текста программы
+        accum = ""
+        # начальный статус
+        self.state = Lexer.START
         ch = self.get_char()
 
         """
