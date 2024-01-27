@@ -4,6 +4,10 @@ import operator
 from Lexer_java import Lexer, Token, help
 from SymbolTable import SymbolTable
 from CodeGenerator import CodeGenerator
+from difflib import SequenceMatcher
+
+def similar(a, b):
+    return SequenceMatcher(None, a, b).ratio()
 
 
 class Node:
@@ -61,7 +65,7 @@ class NodeBlock(NodeProgram):
     pass
 
 
-class NodeSystemOutPrint(NodeProgram):
+class NodeSystemOutPrint(Node):
     def __init__(self, header, expression):
         self.header = header
         self.expression = expression
@@ -129,11 +133,7 @@ class NodeActualParams(NodeParams):
 
 
 class NodeElseBlock(NodeBlock):
-    def __int__(self, block):
-        self.block = block
-
-    def getGeneratedText(self):
-        return "{\n" + self.block.getGeneratedText() + "}\n"
+    pass
 
 
 class NodeIfConstruction(Node):
@@ -181,6 +181,19 @@ class NodeSwitchConstruction(Node):
         s += "break;\n" + "}\n"
         return s
             
+
+class NodeForConstruction(Node):
+    def __init__(self, variable_declarator, expression, increment, block):
+        self.var_declr = variable_declarator
+        self.expr = expression
+        self.incr = increment
+        self.block = block
+
+    def getGeneratedText(self):
+        return "for (" + self.var_declr.getGeneratedText() + \
+               self.expr.getGeneratedText() + ";" + \
+               self.incr.getGeneratedText() + ") {\n" + \
+               self.block.getGeneratedText() + "}"
 
 
 class NodeReturnStatement(Node):
@@ -260,6 +273,14 @@ class NodeUnaryOperator(Node):
 
     def getGeneratedText(self):
         return self.operand.getGeneratedText()
+
+
+class NodeIncrement(Node):
+    def __init__(self, _id):
+        self.id = _id
+
+    def getGeneratedText(self):
+        return self.id + "++"
 
 
 class NodeUnaryMinus(NodeUnaryOperator):
@@ -474,7 +495,7 @@ class Parser:
                 if self.token.name in table.table:
                     f = True
             if not f:
-                self.error(SemanticErrors.UnknowingIdentifier(self.lexer.lineno, self.lexer.position))
+                self.error(SemanticErrors.UnknowingIdentifier(self.token.name, self.lexer.lineno, self.lexer.position, "variable"))
             # Берем следующий токен
             self.next_token()
             # Если следующий токен это (, то значит операндом является функция
@@ -596,10 +617,15 @@ class Parser:
                 if self.token.value.lower() in help.DATA_TYPES or self.token.value == "ID":
                     # Добавляем переменную в таблицу символов
                     self.symbolTable[len(self.symbolTable) - 1].table[_id] = data_type
+
                     left_side = NodeDeclaration(data_type, _id)
                     right_side = NodeIntLiteral(self.expression(data_type))
+<<<<<<< HEAD
                     if left_side.type != right_side.value.type:
                         self.error(SyntaxErrors.DeclarationError(self.lexer.lineno, self.lexer.position))
+=======
+
+>>>>>>> 3160f5cdfe9fe2007b644f372da86343c713c73f
                     return NodeAssigning(left_side, right_side)
             # Добавляем переменную в таблицу символов
             self.symbolTable[len(self.symbolTable) - 1].table[_id] = data_type
@@ -617,6 +643,21 @@ class Parser:
         else:
             self.error(SyntaxErrors.DeclarationError(self.lexer.lineno, self.lexer.position))
 
+    # Этот метод обрабатывает инкремент: <increment> ::= <identifier>++
+    def increment(self) -> Node:
+        if self.token.value != "ID":
+            self.error(SyntaxErrors.MissingID(self.lexer.lineno, self.lexer.position))
+        
+        _id = self.token.name
+        self.next_token()
+
+        if self.token.name != "++":
+            self.error(SyntaxErrors.MissingSpecSymbol("++", self.lexer.lineno, self.lexer.position))
+        self.next_token()
+
+        return NodeIncrement(_id)
+
+
     def block(self) -> Node:
         #  Добавляем локальную таблицу символов
         self.symbolTable.append(SymbolTable())
@@ -626,8 +667,13 @@ class Parser:
             statements.append(self.local_statement())
 
             if isinstance(statements[len(statements) - 1], NodeIfConstruction) or\
+<<<<<<< HEAD
                 isinstance(statements[len(statements) - 1], NodeWhileConstruction) or\
                 isinstance(statements[len(statements) - 1], NodeSwitchConstruction):
+=======
+               isinstance(statements[len(statements) - 1], NodeWhileConstruction) or\
+               isinstance(statements[len(statements) - 1], NodeForConstruction):
+>>>>>>> 3160f5cdfe9fe2007b644f372da86343c713c73f
                 continue
 
             if self.token.name != ";":
@@ -673,7 +719,8 @@ class Parser:
                 if self.token.name in table.table:
                     f = True
             if not f:
-                self.error(SemanticErrors.UnknowingIdentifier(self.token.name, self.lexer.lineno, self.lexer.position))
+                expectedWord = self.findExpectedWord(self.token.name)
+                self.error(SemanticErrors.UnknowingIdentifier(self.token.name, self.lexer.lineno, self.lexer.position, expectedWord))
             
             self.next_token()
 
@@ -749,6 +796,64 @@ class Parser:
             self.next_token()
 
             return NodeIfConstruction(expr, block, else_block)
+        # Обрабатываем цикл for. Его грамматика:
+        # for ( <variable declarator> ; <expression> ; <increment> ) { <statement> }
+        elif self.token.name == "for":
+            # пропускаем for
+            self.next_token()
+
+            #  Проверяем наличие (
+            if self.token.name != "(":
+                self.error(SyntaxErrors.MissingSpecSymbol("(", self.lexer.lineno, self.lexer.position))
+            #  Пропускаем (
+            self.next_token()
+
+            # Начинаем разбор <variable declarator>
+            variable_declarator = self.local_statement()
+
+            #  Проверяем наличие ;
+            if self.token.name != ";":
+                self.error(SyntaxErrors.MissingSpecSymbol(";", self.lexer.lineno, self.lexer.position))
+            #  Пропускаем ;
+            self.next_token()
+
+            # Начинаем проверять выражение
+            expr = self.expression("boolean")
+
+            #  Проверяем наличие ;
+            if self.token.name != ";":
+                self.error(SyntaxErrors.MissingSpecSymbol(";", self.lexer.lineno, self.lexer.position))
+            #  Пропускаем ;
+            self.next_token()
+
+            # Разбираем инкремент
+            incr = self.increment()
+
+            # Проверяем, что перменная в объявлении цикла совпадает с переменной в инкременте
+            if incr.id != variable_declarator.left_side.id:
+                self.error(SemanticErrors.InvalidOperation(self.lexer.lineno, self.lexer.position))
+
+            #  Проверяем наличие )
+            if self.token.name != ")":
+                self.error(SyntaxErrors.MissingSpecSymbol(")", self.lexer.lineno, self.lexer.position))
+            #  Пропускаем )
+            self.next_token()
+
+            #  Проверяем наличие {
+            if self.token.name != "{":
+                self.error(SyntaxErrors.MissingSpecSymbol("{", self.lexer.lineno, self.lexer.position))
+            #  Пропускаем {
+            self.next_token()
+
+            block = self.block()
+
+            # Проверяем наличие }
+            if self.token.name != "}":
+                self.error(SyntaxErrors.MissingSpecSymbol("}", self.lexer.lineno, self.lexer.position))
+            self.next_token()
+
+            return NodeForConstruction(variable_declarator, expr, incr, block)
+
         # Обрабатываем цикл while. Его грамматика:
         # while ( <expression> ) { <statements> }
         elif self.token.name == "while":
@@ -1035,12 +1140,31 @@ class Parser:
             nodeProgram = NodeProgram(statements)
             nodeProgram.setHeader(header)
             return nodeProgram
-
+        
+    def findExpectedWord(self, word) -> str:
+                expectedWord = ""
+                maxSimilar = 0
+                for acc in help.ACCESS_MODIFIERS:
+                    sim = similar(str(word), str(acc))
+                    if sim > maxSimilar:
+                        expectedWord = acc
+                        maxSimilar = sim
+                for acc in help.KEY_WORDS:
+                    sim = similar(str(word), str(acc))
+                    if sim > maxSimilar:
+                        expectedWord = acc
+                        maxSimilar = sim
+                for acc in help.DATA_TYPES:
+                    sim = similar(str(word), str(acc))
+                    if sim > maxSimilar:
+                        expectedWord = acc
+                        maxSimilar = sim
+                return expectedWord
 
 class SemanticErrors:
     @staticmethod
-    def UnknowingIdentifier(id, line, pos):
-        return f"Using unknowing identifier {id} in line {line} on position {pos}"
+    def UnknowingIdentifier(id, line, pos, expectedWord):
+        return f"Using unknowing identifier '{id}' in line {line} on position {pos}. Expected '{expectedWord}'"
 
     @staticmethod
     def AlreadyDeclared(line, pos):
@@ -1066,7 +1190,7 @@ class SyntaxErrors:
 
     @staticmethod
     def MissingSpecSymbol(text, line, pos):
-        return f"Missing special symbol {text} in line {line} on position {pos}"
+        return f"Missing special symbol '{text}' in line {line} on position {pos}"
 
     @staticmethod
     def MissingDataType(line, pos):
