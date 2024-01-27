@@ -620,12 +620,10 @@ class Parser:
 
                     left_side = NodeDeclaration(data_type, _id)
                     right_side = NodeIntLiteral(self.expression(data_type))
-<<<<<<< HEAD
                     if left_side.type != right_side.value.type:
                         self.error(SyntaxErrors.DeclarationError(self.lexer.lineno, self.lexer.position))
-=======
 
->>>>>>> 3160f5cdfe9fe2007b644f372da86343c713c73f
+
                     return NodeAssigning(left_side, right_side)
             # Добавляем переменную в таблицу символов
             self.symbolTable[len(self.symbolTable) - 1].table[_id] = data_type
@@ -667,13 +665,9 @@ class Parser:
             statements.append(self.local_statement())
 
             if isinstance(statements[len(statements) - 1], NodeIfConstruction) or\
-<<<<<<< HEAD
                 isinstance(statements[len(statements) - 1], NodeWhileConstruction) or\
-                isinstance(statements[len(statements) - 1], NodeSwitchConstruction):
-=======
-               isinstance(statements[len(statements) - 1], NodeWhileConstruction) or\
-               isinstance(statements[len(statements) - 1], NodeForConstruction):
->>>>>>> 3160f5cdfe9fe2007b644f372da86343c713c73f
+                isinstance(statements[len(statements) - 1], NodeSwitchConstruction) or\
+                isinstance(statements[len(statements) - 1], NodeForConstruction):
                 continue
 
             if self.token.name != ";":
