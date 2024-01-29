@@ -1,4 +1,3 @@
-# import re
 class help:
     ACCESS_MODIFIERS = {
         "public": "PUBLIC",
@@ -19,6 +18,9 @@ class help:
         "while": "WHILE",
         "System.out.print": "SYSTEM.OUT.PRINT",
         "System.out.println": "SYSTEM.OUT.PRINTLN",
+        "switch": "SWITCH",
+        "case": "CASE",
+        "default": "DEFAULT"
     }
 
     DATA_TYPES = {
@@ -59,6 +61,7 @@ class help:
         "||": "OR",
         "|": "SHORT_OR",
         "!": "NOT",
+        ":": "DOUBLE_DOT",
     }
 
     SPEC = {
@@ -74,7 +77,7 @@ class help:
         "//": "DOUBLE_SLASH"
     }
 
-    IGNORE = ["\n", " ", "\t", ":"]
+    IGNORE = ["\n", " ", "\t"]
 
 
 class Token:
@@ -133,8 +136,10 @@ class Lexer:
         Возвращает 
     '''
     def get_next_token(self):
-        accum = ""  # накапливает символы из текста программы
-        self.state = Lexer.START  # начальный статус
+        # накапливает символы из текста программы
+        accum = ""
+        # начальный статус
+        self.state = Lexer.START
         ch = self.get_char()
 
         """
@@ -171,7 +176,7 @@ class Lexer:
                 accum += ch
                 ch = self.get_char()
                 if ch != "'":
-                    raise SyntaxError.SyntaxError("char", self.lineno, self.position)
+                    raise SyntaxError("char", self.lineno, self.position)
                 else:
                     return Token(accum, help.DATA_TYPES[Lexer.STATES[Lexer.CHAR]])
 
@@ -204,7 +209,7 @@ class Lexer:
                 elif accum in help.OPERATORS:
                     return Token(accum, help.OPERATORS[accum])
                 else:
-                    raise SyntaxError.SyntaxError("operator", self.lineno, self.position)
+                    raise SyntaxError("operator", self.lineno, self.position)
 
             """
             Если первым символом встретили букву, то переходим в состояние "ID" и начинаем собирать
@@ -264,7 +269,7 @@ class Lexer:
                     ch = self.get_char()
                     if ch == ".":
                         if self.state == Lexer.DOUBLE:
-                            raise SyntaxError.SyntaxError("double", self.lineno, self.position)
+                            raise SyntaxError("double", self.lineno, self.position)
                         self.state = Lexer.DOUBLE
                         accum += ch
                         ch = self.get_char()
@@ -279,13 +284,13 @@ class Lexer:
                         self.state = None
                     elif not ch.isnumeric():
                         if self.state == Lexer.DOUBLE:
-                            raise SyntaxError.SyntaxError("double", self.lineno, self.position)
+                            raise SyntaxError("double", self.lineno, self.position)
                         else:
-                            raise SyntaxError.SyntaxError("integer", self.lineno, self.position)
+                            raise SyntaxError("integer", self.lineno, self.position)
 
                 # Если наше число заканчивается на точку, то выкидываем ошибку
                 if accum[len(accum) - 1] == ".":
-                    raise SyntaxError.SyntaxError("real number", self.lineno, self.position)
+                    raise SyntaxError("real number", self.lineno, self.position)
 
                 self.pos -= 1
                 if "." in accum:
@@ -312,6 +317,9 @@ class Lexer:
 
 
 class SyntaxError(BaseException):
-    @staticmethod
-    def SyntaxError(text, line, pos):
-        return f"Syntax error: {text} in line {line} position {pos}"
+    def __init__(self, text, line, pos):
+        self.text = text
+        self.line = line
+        self.pos = pos
+    def __str__(self):
+        return f"Syntax error: {self.text} in line {self.line} position {self.pos}"
